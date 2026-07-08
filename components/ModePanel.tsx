@@ -15,14 +15,22 @@ export default function ModePanel({
 }: {
   modes: ModeSettings[];
   scheme: Scheme;
-  onChange: (modes: ModeSettings[]) => void;
+  onChange: (modes: ModeSettings[], editedIndex: number) => void;
 }) {
   const update = (i: number, patch: Partial<ModeSettings>) => {
-    onChange(modes.map((m, j) => (j === i ? { ...m, ...patch } : m)));
+    onChange(
+      modes.map((m, j) => (j === i ? { ...m, ...patch } : m)),
+      i
+    );
   };
 
   return (
     <div className="space-y-3">
+      <p className="text-xs leading-relaxed text-zinc-500">
+        Set these like your real bike, then check you can tell the modes apart with your eyes
+        closed. The scheme generates each sound from these values — it isn&apos;t tied to slot
+        numbers.
+      </p>
       {modes.map((mode, i) => (
         <div key={i} className="rounded-lg border border-zinc-800 bg-zinc-900/60 p-3">
           <div className="mb-2 flex items-center justify-between">
@@ -33,13 +41,13 @@ export default function ModePanel({
                 stopAll();
                 playModeSound(scheme, mode, i + 1);
               }}
-              className="rounded border border-zinc-700 px-2 py-0.5 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+              className="rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
               title={`Play mode ${i + 1} sound`}
             >
               ▶ play
             </button>
           </div>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <Slider
               label="HP"
               value={mode.hp}
@@ -67,11 +75,6 @@ export default function ModePanel({
           </div>
         </div>
       ))}
-      <p className="text-xs leading-relaxed text-zinc-500">
-        Set these like your real bike, then check you can tell the modes apart with your eyes
-        closed. The scheme generates each sound from these values — it isn&apos;t tied to slot
-        numbers.
-      </p>
     </div>
   );
 }

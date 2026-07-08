@@ -1,16 +1,29 @@
 "use client";
 
-// Tabbed editor for the scheme's voices (HP / regen / TC), the fixed signals
-// (reverse / crawl) and the extras (mode chirps, power-on, sequencing).
+// Tabbed editor for the whole scheme: the bike's mode slots first, then the
+// parameter voices (HP / regen / TC), the fixed signals (reverse / crawl) and
+// extras (mode chirps, power-on, sequencing).
+//
+// Moving any control auto-plays the affected sound once (debounced), using
+// the preview-mode selector at the top for the parameter voices.
 
-import { useState } from "react";
-import type { FixedSignal, Scheme, VoiceOrder, Waveform } from "@/lib/scheme";
+import { useEffect, useRef, useState } from "react";
+import type {
+  FixedSignal,
+  ModeSettings,
+  Scheme,
+  VoiceOrder,
+  Waveform,
+} from "@/lib/scheme";
 import { LIMITS } from "@/lib/scheme";
-import { playSignal, stopAll } from "@/lib/audio";
-import { Button, Select, Slider, Toggle } from "./controls";
+import { playModeSound, playSignal, stopAll } from "@/lib/audio";
+import ModePanel from "./ModePanel";
+import { Select, Slider, Toggle } from "./controls";
 
-const TABS = ["HP", "Regen", "TC", "Reverse", "Crawl", "Extras"] as const;
+const TABS = ["Modes", "HP", "Regen", "TC", "Reverse", "Crawl", "Extras"] as const;
 type Tab = (typeof TABS)[number];
+
+type PreviewKind = "mode" | "reverse" | "crawl" | "powerOn";
 
 const WAVE_OPTIONS: { value: Waveform; label: string }[] = [
   { value: "sine", label: "Sine (smooth)" },
@@ -30,24 +43,99 @@ const ORDER_OPTIONS: { value: string; label: string }[] = [
 
 export default function VoicePanels({
   scheme,
+  modes,
   onChange,
+  onModesChange,
 }: {
   scheme: Scheme;
+  modes: ModeSettings[];
   onChange: (scheme: Scheme) => void;
+  onModesChange: (modes: ModeSettings[]) => void;
 }) {
-  const [tab, setTab] = useState<Tab>("HP");
+  const [tab, setTab] = useState<Tab>("Modes");
+  const [previewMode, setPreviewMode] = useState(1); // 1..5
+  const previewTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const set = (patch: Partial<Scheme>) => onChange({ ...scheme, ...patch });
+  useEffect(
+    () => () => {
+      if (previewTimer.current) clearTimeout(previewTimer.current);
+    },
+    []
+  );
+
+  // Debounced auto-play: fires once, shortly after the last control movement.
+  const schedulePreview = (
+    kind: PreviewKind,
+    nextScheme: Scheme,
+    nextModes: ModeSettings[],
+    modeNumber: number
+  ) => {
+    if (previewTimer.current) clearTimeout(previewTimer.current);
+    previewTimer.current = setTimeout(() => {
+      stopAll();
+      if (kind === "reverse") playSignal({ ...nextScheme.reverse, loop: false });
+      else if (kind === "crawl") playSignal({ ...nextScheme.crawl, loop: false });
+      else if (kind === "powerOn") playSignal({ ...nextScheme.powerOn, loop: false });
+      else playModeSound(nextScheme, nextModes[modeNumber - 1], modeNumber);
+    }, 250);
+  };
+
+  const previewKindForTab: PreviewKind =
+    tab === "Reverse" ? "reverse" : tab === "Crawl" ? "crawl" : "mode";
+
+  const set = (patch: Partial<Scheme>, kind: PreviewKind = previewKindForTab) => {
+    const next = { ...scheme, ...patch };
+    onChange(next);
+    schedulePreview(kind, next, modes, previewMode);
+  };
+
+  const playPreview = () => {
+    stopAll();
+    playModeSound(scheme, modes[previewMode - 1], previewMode);
+  };
 
   return (
     <div>
+      {/* Preview bar: which mode the voice edits are auditioned against */}
+      <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900/60 p-2">
+        <span className="px-1 text-xs text-zinc-500">Preview mode</span>
+        <div className="flex overflow-hidden rounded border border-zinc-700">
+          {[1, 2, 3, 4, 5].map((n) => (
+            <button
+              key={n}
+              type="button"
+              onClick={() => {
+                setPreviewMode(n);
+                stopAll();
+                playModeSound(scheme, modes[n - 1], n);
+              }}
+              className={`h-9 w-9 text-sm font-semibold transition-colors ${
+                previewMode === n
+                  ? "bg-red-600 text-white"
+                  : "bg-zinc-900 text-zinc-400 hover:bg-zinc-800"
+              }`}
+            >
+              {n}
+            </button>
+          ))}
+        </div>
+        <button
+          type="button"
+          onClick={playPreview}
+          className="rounded bg-zinc-800 px-3 py-2 text-sm font-medium text-zinc-200 hover:bg-zinc-700"
+          title={`Play mode ${previewMode} sound`}
+        >
+          ▶ Play
+        </button>
+      </div>
+
       <div className="mb-3 flex flex-wrap gap-1">
         {TABS.map((t) => (
           <button
             key={t}
             type="button"
             onClick={() => setTab(t)}
-            className={`rounded-t px-3 py-1.5 text-sm ${
+            className={`rounded-t px-3 py-2 text-sm ${
               tab === t
                 ? "bg-zinc-800 font-semibold text-white"
                 : "text-zinc-500 hover:text-zinc-300"
@@ -59,6 +147,18 @@ export default function VoicePanels({
       </div>
 
       <div className="space-y-4 rounded-lg border border-zinc-800 bg-zinc-900/60 p-4">
+        {tab === "Modes" && (
+          <ModePanel
+            modes={modes}
+            scheme={scheme}
+            onChange={(nextModes, editedIndex) => {
+              onModesChange(nextModes);
+              setPreviewMode(editedIndex + 1);
+              schedulePreview("mode", scheme, nextModes, editedIndex + 1);
+            }}
+          />
+        )}
+
         {tab === "HP" && (
           <>
             <Toggle
@@ -262,7 +362,7 @@ export default function VoicePanels({
         {tab === "Reverse" && (
           <FixedSignalEditor
             signal={scheme.reverse}
-            onChange={(reverse) => set({ reverse: { ...reverse, loop: true } })}
+            onChange={(reverse) => set({ reverse: { ...reverse, loop: true } }, "reverse")}
             lockLoop
             hint="The safety centerpiece. It repeats the whole time reverse is engaged — make it unmissable, like a truck's backup beeper."
           />
@@ -271,7 +371,7 @@ export default function VoicePanels({
         {tab === "Crawl" && (
           <FixedSignalEditor
             signal={scheme.crawl}
-            onChange={(crawl) => set({ crawl })}
+            onChange={(crawl) => set({ crawl }, "crawl")}
             hint="Walking-pace mode. Distinct from reverse but gentler."
           />
         )}
@@ -354,12 +454,16 @@ export default function VoicePanels({
               <Toggle
                 label="Power-on sound"
                 checked={scheme.powerOn.enabled}
-                onChange={(enabled) => set({ powerOn: { ...scheme.powerOn, enabled } })}
+                onChange={(enabled) =>
+                  set({ powerOn: { ...scheme.powerOn, enabled } }, "powerOn")
+                }
               />
               {scheme.powerOn.enabled && (
                 <FixedSignalEditor
                   signal={scheme.powerOn}
-                  onChange={(s) => set({ powerOn: { ...scheme.powerOn, ...s, loop: false } })}
+                  onChange={(s) =>
+                    set({ powerOn: { ...scheme.powerOn, ...s, loop: false } }, "powerOn")
+                  }
                   lockLoop
                   compact
                 />
@@ -388,17 +492,6 @@ function FixedSignalEditor({
   return (
     <div className="space-y-4">
       {hint && <p className="text-xs text-zinc-500">{hint}</p>}
-      <div className="flex items-center gap-2">
-        <Button
-          onClick={() => {
-            stopAll();
-            const handle = playSignal({ ...signal, loop: false });
-            void handle;
-          }}
-        >
-          ▶ Preview once
-        </Button>
-      </div>
       <Select
         label="Waveform"
         value={signal.waveform}

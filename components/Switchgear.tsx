@@ -51,8 +51,12 @@ export default function Switchgear({
 
   const tap = (dir: "up" | "down") => {
     if (!power) return;
-    if (state === "reverse" || state === "crawl") {
-      enterMode(modeIndex); // tap exits back to the current mode
+    if (state === "reverse") {
+      if (dir === "up") enterMode(modeIndex); // only ▲ exits reverse
+      return;
+    }
+    if (state === "crawl") {
+      if (dir === "down") enterMode(modeIndex); // only ▼ exits crawl
       return;
     }
     const next =
@@ -148,9 +152,10 @@ export default function Switchgear({
 
       <p className="max-w-xs text-center text-xs leading-relaxed text-zinc-500">
         Tap <span className="text-zinc-300">▲/▼</span> to move through modes 1–5. Hold{" "}
-        <span className="text-zinc-300">▼</span> for reverse, hold{" "}
-        <span className="text-zinc-300">▲</span> for crawl. Tap either button to return to your
-        mode.
+        <span className="text-zinc-300">▼</span> for reverse — tap{" "}
+        <span className="text-zinc-300">▲</span> to exit. Hold{" "}
+        <span className="text-zinc-300">▲</span> for crawl — tap{" "}
+        <span className="text-zinc-300">▼</span> to exit.
       </p>
     </div>
   );

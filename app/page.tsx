@@ -17,7 +17,6 @@ import {
   type SavedScheme,
 } from "@/lib/storage";
 import Switchgear from "@/components/Switchgear";
-import ModePanel from "@/components/ModePanel";
 import VoicePanels from "@/components/VoicePanels";
 import TopBar from "@/components/TopBar";
 
@@ -113,26 +112,26 @@ export default function Editor() {
         onPlayAll={playAll}
       />
 
-      <main className="mx-auto grid max-w-7xl gap-6 p-4 lg:grid-cols-[320px_1fr_380px]">
+      <main className="mx-auto grid max-w-5xl gap-6 p-4 md:grid-cols-[320px_1fr]">
         <section>
           <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-zinc-500">
             Switchgear
           </h2>
-          <Switchgear scheme={scheme} modes={modes} />
-        </section>
-
-        <section>
-          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-zinc-500">
-            Your bike&apos;s modes
-          </h2>
-          <ModePanel modes={modes} scheme={scheme} onChange={setModes} />
+          <div className="md:sticky md:top-4">
+            <Switchgear scheme={scheme} modes={modes} />
+          </div>
         </section>
 
         <section>
           <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-zinc-500">
             Sound design
           </h2>
-          <VoicePanels scheme={scheme} onChange={setScheme} />
+          <VoicePanels
+            scheme={scheme}
+            modes={modes}
+            onChange={setScheme}
+            onModesChange={setModes}
+          />
         </section>
       </main>
 
