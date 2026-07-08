@@ -16,7 +16,14 @@ import type {
   Waveform,
 } from "@/lib/scheme";
 import { LIMITS } from "@/lib/scheme";
-import { playChirps, playModeSound, playSignal, playVoice, stopAll } from "@/lib/audio";
+import {
+  playChirps,
+  playModeSound,
+  playSignal,
+  playVoice,
+  playVoiceSequence,
+  stopAll,
+} from "@/lib/audio";
 import ModePanel from "./ModePanel";
 import { Select, Slider, Toggle } from "./controls";
 
@@ -54,6 +61,13 @@ export default function VoicePanels({
 }) {
   const [tab, setTab] = useState<Tab>("Modes");
   const [previewMode, setPreviewMode] = useState(1); // 1..5
+  // Per-voice preview values: while editing a voice, slider moves audition it
+  // at each selected value in sequence (empty = use the preview mode's value).
+  const [previewVals, setPreviewVals] = useState<Record<"hp" | "regen" | "tc", number[]>>({
+    hp: [],
+    regen: [],
+    tc: [],
+  });
   const previewTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(
@@ -77,9 +91,11 @@ export default function VoicePanels({
       else if (kind === "crawl") playSignal({ ...nextScheme.crawl, loop: false });
       else if (kind === "powerOn") playSignal({ ...nextScheme.powerOn, loop: false });
       else if (kind === "chirps") playChirps(nextScheme, modeNumber);
-      else if (kind === "hp" || kind === "regen" || kind === "tc")
-        playVoice(nextScheme, kind, nextModes[modeNumber - 1]);
-      else playModeSound(nextScheme, nextModes[modeNumber - 1], modeNumber);
+      else if (kind === "hp" || kind === "regen" || kind === "tc") {
+        const vals = previewVals[kind];
+        if (vals.length > 0) playVoiceSequence(nextScheme, kind, vals);
+        else playVoice(nextScheme, kind, nextModes[modeNumber - 1]);
+      } else playModeSound(nextScheme, nextModes[modeNumber - 1], modeNumber);
     }, 250);
   };
 
@@ -106,6 +122,22 @@ export default function VoicePanels({
   const playPreview = () => {
     stopAll();
     playModeSound(scheme, modes[previewMode - 1], previewMode);
+  };
+
+  const toggleVal = (voice: "hp" | "regen" | "tc", v: number) => {
+    const selecting = !previewVals[voice].includes(v);
+    setPreviewVals((prev) => {
+      const vals = prev[voice];
+      const sel = !vals.includes(v);
+      return {
+        ...prev,
+        [voice]: sel ? [...vals, v].sort((a, b) => a - b) : vals.filter((x) => x !== v),
+      };
+    });
+    if (selecting) {
+      stopAll();
+      playVoice(scheme, voice, { hp: v, regen: v, tc: v });
+    }
   };
 
   return (
@@ -175,11 +207,19 @@ export default function VoicePanels({
 
         {tab === "HP" && (
           <>
-            <Toggle
-              label="HP voice enabled"
-              checked={scheme.hp.enabled}
-              onChange={(enabled) => set({ hp: { ...scheme.hp, enabled } })}
-            />
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <Toggle
+                label="HP voice enabled"
+                checked={scheme.hp.enabled}
+                onChange={(enabled) => set({ hp: { ...scheme.hp, enabled } })}
+              />
+              <ValueChips
+                values={[0, 10, 20, 30, 40, 50, 60, 70, 80]}
+                selected={previewVals.hp}
+                onToggle={(v) => toggleVal("hp", v)}
+                unit="HP"
+              />
+            </div>
             <p className="text-xs text-zinc-500">
               A tone whose pitch scales with horsepower: 0 hp sits at the low pitch, 80 hp reaches
               the high pitch.
@@ -237,11 +277,19 @@ export default function VoicePanels({
 
         {tab === "Regen" && (
           <>
-            <Toggle
-              label="Regen voice enabled"
-              checked={scheme.regen.enabled}
-              onChange={(enabled) => set({ regen: { ...scheme.regen, enabled } })}
-            />
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <Toggle
+                label="Regen voice enabled"
+                checked={scheme.regen.enabled}
+                onChange={(enabled) => set({ regen: { ...scheme.regen, enabled } })}
+              />
+              <ValueChips
+                values={[0, 20, 40, 60, 80, 100]}
+                selected={previewVals.regen}
+                onToggle={(v) => toggleVal("regen", v)}
+                unit="%"
+              />
+            </div>
             <p className="text-xs text-zinc-500">
               Engine-braking strength, 0–100%. Pulses: more regen = more pulses. Fall: more regen =
               deeper falling tone. 0% is silent.
@@ -321,11 +369,19 @@ export default function VoicePanels({
 
         {tab === "TC" && (
           <>
-            <Toggle
-              label="TC voice enabled"
-              checked={scheme.tc.enabled}
-              onChange={(enabled) => set({ tc: { ...scheme.tc, enabled } })}
-            />
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <Toggle
+                label="TC voice enabled"
+                checked={scheme.tc.enabled}
+                onChange={(enabled) => set({ tc: { ...scheme.tc, enabled } })}
+              />
+              <ValueChips
+                values={[0, 20, 40, 60, 80, 100]}
+                selected={previewVals.tc}
+                onToggle={(v) => toggleVal("tc", v)}
+                unit="%"
+              />
+            </div>
             <p className="text-xs text-zinc-500">
               Traction control, 0–100%, as a run of short ticks: more TC = more ticks. 0% is
               silent.
@@ -496,6 +552,45 @@ export default function VoicePanels({
           </>
         )}
       </div>
+    </div>
+  );
+}
+
+// Multi-select preview values for a voice tab. Click to select (plays that
+// value), click again to deselect. While any are selected, slider moves play
+// the voice at each selected value in sequence.
+function ValueChips({
+  values,
+  selected,
+  onToggle,
+  unit,
+}: {
+  values: number[];
+  selected: number[];
+  onToggle: (v: number) => void;
+  unit: string;
+}) {
+  return (
+    <div
+      className="flex flex-wrap items-center gap-1"
+      title="Preview values — slider changes play each selected value in sequence"
+    >
+      <span className="mr-1 text-[10px] uppercase tracking-wide text-zinc-500">Preview at</span>
+      {values.map((v) => (
+        <button
+          key={v}
+          type="button"
+          onClick={() => onToggle(v)}
+          className={`min-w-8 rounded px-1.5 py-1 text-xs font-medium transition-colors ${
+            selected.includes(v)
+              ? "bg-red-600 text-white"
+              : "border border-zinc-700 bg-zinc-900 text-zinc-400 hover:bg-zinc-800"
+          }`}
+        >
+          {v}
+        </button>
+      ))}
+      <span className="text-[10px] text-zinc-500">{unit}</span>
     </div>
   );
 }

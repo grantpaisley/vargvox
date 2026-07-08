@@ -140,6 +140,27 @@ export function playVoice(
   if (voice === "tc" && scheme.tc.enabled) scheduleTc(scheme, mode.tc, 0);
 }
 
+// Play one voice at several parameter values back-to-back (e.g. HP at
+// 0/40/80) so the ear can compare how the encoding scales across the range.
+// A value that renders silent (e.g. 0% regen) still occupies its slot in the
+// sequence, so the silence itself is audible as information.
+export function playVoiceSequence(
+  scheme: Scheme,
+  voice: "hp" | "regen" | "tc",
+  values: number[],
+  gapMs = 280
+): void {
+  ensureContext();
+  let cursor = 0;
+  for (const value of values) {
+    let len = 0;
+    if (voice === "hp" && scheme.hp.enabled) len = scheduleHp(scheme, value, cursor);
+    if (voice === "regen" && scheme.regen.enabled) len = scheduleRegen(scheme, value, cursor);
+    if (voice === "tc" && scheme.tc.enabled) len = scheduleTc(scheme, value, cursor);
+    cursor += Math.max(len, 120) + gapMs;
+  }
+}
+
 // Play just the mode-number chirps in isolation.
 export function playChirps(scheme: Scheme, modeNumber: number): void {
   ensureContext();
