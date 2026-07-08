@@ -262,6 +262,7 @@ export interface LoopHandle {
 }
 
 export function playSignal(sig: FixedSignal): LoopHandle {
+  if (!sig.enabled) return { stop: () => {} };
   ensureContext();
   let stopped = false;
 

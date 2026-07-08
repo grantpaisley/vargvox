@@ -204,12 +204,12 @@ export default function VoicePanels({
             {t}
           </button>
         ))}
-        <PlayPaneButton onClick={playCurrentPane} className="ml-auto" />
       </div>
 
       <div className="space-y-4 rounded-lg border border-zinc-800 bg-zinc-900/60 p-4">
-        {tab === "Modes" && (
-          <>
+        {/* Pane header: enable toggle for what this pane edits + its play button */}
+        <div className="flex items-center justify-between gap-2">
+          {tab === "Modes" && (
             <Toggle
               label="Mode voice enabled (chirps: mode 3 = three chirps)"
               checked={scheme.modeChirps.enabled}
@@ -217,6 +217,50 @@ export default function VoicePanels({
                 set({ modeChirps: { ...scheme.modeChirps, enabled } }, "chirps")
               }
             />
+          )}
+          {tab === "HP" && (
+            <Toggle
+              label="HP voice enabled"
+              checked={scheme.hp.enabled}
+              onChange={(enabled) => set({ hp: { ...scheme.hp, enabled } })}
+            />
+          )}
+          {tab === "Regen" && (
+            <Toggle
+              label="Regen voice enabled"
+              checked={scheme.regen.enabled}
+              onChange={(enabled) => set({ regen: { ...scheme.regen, enabled } })}
+            />
+          )}
+          {tab === "TC" && (
+            <Toggle
+              label="TC voice enabled"
+              checked={scheme.tc.enabled}
+              onChange={(enabled) => set({ tc: { ...scheme.tc, enabled } })}
+            />
+          )}
+          {tab === "Reverse" && (
+            <Toggle
+              label="Reverse voice enabled"
+              checked={scheme.reverse.enabled}
+              onChange={(enabled) => set({ reverse: { ...scheme.reverse, enabled } }, "reverse")}
+            />
+          )}
+          {tab === "Crawl" && (
+            <Toggle
+              label="Crawl voice enabled"
+              checked={scheme.crawl.enabled}
+              onChange={(enabled) => set({ crawl: { ...scheme.crawl, enabled } }, "crawl")}
+            />
+          )}
+          {tab === "Extras" && (
+            <span className="text-sm font-medium text-zinc-300">Extras</span>
+          )}
+          <PlayPaneButton onClick={playCurrentPane} />
+        </div>
+
+        {tab === "Modes" && (
+          <>
             <ModePanel
               modes={modes}
               scheme={scheme}
@@ -231,19 +275,12 @@ export default function VoicePanels({
 
         {tab === "HP" && (
           <>
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <Toggle
-                label="HP voice enabled"
-                checked={scheme.hp.enabled}
-                onChange={(enabled) => set({ hp: { ...scheme.hp, enabled } })}
-              />
-              <ValueChips
-                values={[0, 10, 20, 30, 40, 50, 60, 70, 80]}
-                selected={previewVals.hp}
-                onToggle={(v) => toggleVal("hp", v)}
-                unit="HP"
-              />
-            </div>
+            <ValueChips
+              values={[0, 10, 20, 30, 40, 50, 60, 70, 80]}
+              selected={previewVals.hp}
+              onToggle={(v) => toggleVal("hp", v)}
+              unit="HP"
+            />
             <p className="text-xs text-zinc-500">
               A tone whose pitch scales with horsepower: 0 hp sits at the low pitch, 80 hp reaches
               the high pitch.
@@ -301,19 +338,12 @@ export default function VoicePanels({
 
         {tab === "Regen" && (
           <>
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <Toggle
-                label="Regen voice enabled"
-                checked={scheme.regen.enabled}
-                onChange={(enabled) => set({ regen: { ...scheme.regen, enabled } })}
-              />
-              <ValueChips
-                values={[0, 20, 40, 60, 80, 100]}
-                selected={previewVals.regen}
-                onToggle={(v) => toggleVal("regen", v)}
-                unit="%"
-              />
-            </div>
+            <ValueChips
+              values={[0, 20, 40, 60, 80, 100]}
+              selected={previewVals.regen}
+              onToggle={(v) => toggleVal("regen", v)}
+              unit="%"
+            />
             <p className="text-xs text-zinc-500">
               Engine-braking strength, 0–100%. Pulses: more regen = more pulses. Fall: more regen =
               deeper falling tone. 0% is silent.
@@ -393,19 +423,12 @@ export default function VoicePanels({
 
         {tab === "TC" && (
           <>
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <Toggle
-                label="TC voice enabled"
-                checked={scheme.tc.enabled}
-                onChange={(enabled) => set({ tc: { ...scheme.tc, enabled } })}
-              />
-              <ValueChips
-                values={[0, 20, 40, 60, 80, 100]}
-                selected={previewVals.tc}
-                onToggle={(v) => toggleVal("tc", v)}
-                unit="%"
-              />
-            </div>
+            <ValueChips
+              values={[0, 20, 40, 60, 80, 100]}
+              selected={previewVals.tc}
+              onToggle={(v) => toggleVal("tc", v)}
+              unit="%"
+            />
             <p className="text-xs text-zinc-500">
               Traction control, 0–100%, as a run of short ticks: more TC = more ticks. 0% is
               silent.

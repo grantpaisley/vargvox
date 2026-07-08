@@ -36,6 +36,7 @@ export interface TcVoice {
 }
 
 export interface FixedSignal {
+  enabled: boolean;
   waveform: Waveform;
   pitchHz: number;
   pitch2Hz: number; // 0 = single pitch; otherwise beeps alternate pitch/pitch2
@@ -55,9 +56,7 @@ export interface ModeChirps {
   volume: number;
 }
 
-export interface PowerOnSignal extends FixedSignal {
-  enabled: boolean;
-}
+export type PowerOnSignal = FixedSignal;
 
 export type VoiceOrder = "hp" | "regen" | "tc";
 
@@ -137,6 +136,7 @@ export function defaultScheme(): Scheme {
       volume: 0.5,
     },
     reverse: {
+      enabled: true,
       waveform: "square",
       pitchHz: 950,
       pitch2Hz: 0,
@@ -148,6 +148,7 @@ export function defaultScheme(): Scheme {
       volume: 0.7,
     },
     crawl: {
+      enabled: true,
       waveform: "sine",
       pitchHz: 500,
       pitch2Hz: 650,
@@ -187,6 +188,7 @@ function sanitizeFixedSignal(raw: unknown, fallback: FixedSignal): FixedSignal {
   const s = (raw ?? {}) as Record<string, unknown>;
   const n = (v: unknown, fb: number) => (typeof v === "number" ? v : fb);
   return {
+    enabled: typeof s.enabled === "boolean" ? s.enabled : fallback.enabled,
     waveform: wave(s.waveform ?? fallback.waveform),
     pitchHz: clamp(n(s.pitchHz, fallback.pitchHz), LIMITS.pitchHz.min, LIMITS.pitchHz.max),
     pitch2Hz:
@@ -217,7 +219,6 @@ export function sanitizeScheme(raw: unknown): Scheme {
   const tc = (r.tc ?? {}) as Record<string, unknown>;
   const chirps = (r.modeChirps ?? {}) as Record<string, unknown>;
   const seq = (r.sequence ?? {}) as Record<string, unknown>;
-  const powerOn = (r.powerOn ?? {}) as Record<string, unknown>;
 
   const orderRaw = Array.isArray(seq.order) ? seq.order : d.sequence.order;
   const order = orderRaw.filter((v): v is VoiceOrder =>
@@ -270,11 +271,7 @@ export function sanitizeScheme(raw: unknown): Scheme {
     },
     reverse: { ...sanitizeFixedSignal(r.reverse, d.reverse), loop: true },
     crawl: sanitizeFixedSignal(r.crawl, d.crawl),
-    powerOn: {
-      ...sanitizeFixedSignal(r.powerOn, d.powerOn),
-      loop: false,
-      enabled: typeof powerOn.enabled === "boolean" ? powerOn.enabled : d.powerOn.enabled,
-    },
+    powerOn: { ...sanitizeFixedSignal(r.powerOn, d.powerOn), loop: false },
   };
 }
 
