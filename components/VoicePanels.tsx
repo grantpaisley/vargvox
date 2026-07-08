@@ -16,14 +16,14 @@ import type {
   Waveform,
 } from "@/lib/scheme";
 import { LIMITS } from "@/lib/scheme";
-import { playModeSound, playSignal, stopAll } from "@/lib/audio";
+import { playChirps, playModeSound, playSignal, playVoice, stopAll } from "@/lib/audio";
 import ModePanel from "./ModePanel";
 import { Select, Slider, Toggle } from "./controls";
 
 const TABS = ["Modes", "HP", "Regen", "TC", "Reverse", "Crawl", "Extras"] as const;
 type Tab = (typeof TABS)[number];
 
-type PreviewKind = "mode" | "reverse" | "crawl" | "powerOn";
+type PreviewKind = "mode" | "hp" | "regen" | "tc" | "chirps" | "reverse" | "crawl" | "powerOn";
 
 const WAVE_OPTIONS: { value: Waveform; label: string }[] = [
   { value: "sine", label: "Sine (smooth)" },
@@ -76,12 +76,26 @@ export default function VoicePanels({
       if (kind === "reverse") playSignal({ ...nextScheme.reverse, loop: false });
       else if (kind === "crawl") playSignal({ ...nextScheme.crawl, loop: false });
       else if (kind === "powerOn") playSignal({ ...nextScheme.powerOn, loop: false });
+      else if (kind === "chirps") playChirps(nextScheme, modeNumber);
+      else if (kind === "hp" || kind === "regen" || kind === "tc")
+        playVoice(nextScheme, kind, nextModes[modeNumber - 1]);
       else playModeSound(nextScheme, nextModes[modeNumber - 1], modeNumber);
     }, 250);
   };
 
+  // Editing a tab auditions only that part of the sound.
   const previewKindForTab: PreviewKind =
-    tab === "Reverse" ? "reverse" : tab === "Crawl" ? "crawl" : "mode";
+    tab === "HP"
+      ? "hp"
+      : tab === "Regen"
+        ? "regen"
+        : tab === "TC"
+          ? "tc"
+          : tab === "Reverse"
+            ? "reverse"
+            : tab === "Crawl"
+              ? "crawl"
+              : "mode";
 
   const set = (patch: Partial<Scheme>, kind: PreviewKind = previewKindForTab) => {
     const next = { ...scheme, ...patch };
@@ -382,7 +396,9 @@ export default function VoicePanels({
               <Toggle
                 label="Mode-number chirps (mode 3 = three chirps)"
                 checked={scheme.modeChirps.enabled}
-                onChange={(enabled) => set({ modeChirps: { ...scheme.modeChirps, enabled } })}
+                onChange={(enabled) =>
+                  set({ modeChirps: { ...scheme.modeChirps, enabled } }, "chirps")
+                }
               />
               {scheme.modeChirps.enabled && (
                 <>
@@ -392,7 +408,9 @@ export default function VoicePanels({
                     min={500}
                     max={LIMITS.pitchHz.max}
                     unit=" Hz"
-                    onChange={(pitchHz) => set({ modeChirps: { ...scheme.modeChirps, pitchHz } })}
+                    onChange={(pitchHz) =>
+                      set({ modeChirps: { ...scheme.modeChirps, pitchHz } }, "chirps")
+                    }
                   />
                   <Slider
                     label="Chirp length"
@@ -400,7 +418,9 @@ export default function VoicePanels({
                     min={10}
                     max={150}
                     unit=" ms"
-                    onChange={(chirpMs) => set({ modeChirps: { ...scheme.modeChirps, chirpMs } })}
+                    onChange={(chirpMs) =>
+                      set({ modeChirps: { ...scheme.modeChirps, chirpMs } }, "chirps")
+                    }
                   />
                   <Slider
                     label="Gap"
@@ -409,7 +429,9 @@ export default function VoicePanels({
                     max={300}
                     step={5}
                     unit=" ms"
-                    onChange={(gapMs) => set({ modeChirps: { ...scheme.modeChirps, gapMs } })}
+                    onChange={(gapMs) =>
+                      set({ modeChirps: { ...scheme.modeChirps, gapMs } }, "chirps")
+                    }
                   />
                   <Slider
                     label="Volume"
@@ -417,7 +439,9 @@ export default function VoicePanels({
                     min={0}
                     max={1}
                     step={0.05}
-                    onChange={(volume) => set({ modeChirps: { ...scheme.modeChirps, volume } })}
+                    onChange={(volume) =>
+                      set({ modeChirps: { ...scheme.modeChirps, volume } }, "chirps")
+                    }
                   />
                 </>
               )}

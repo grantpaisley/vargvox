@@ -127,6 +127,35 @@ export function playModeSound(
   return scheme.sequence.layered ? maxEnd : Math.max(cursor - scheme.sequence.gapMs, 0);
 }
 
+// Play a single parameter voice in isolation — used by the editor so that
+// tweaking e.g. the HP tab auditions only the HP part of the sound.
+export function playVoice(
+  scheme: Scheme,
+  voice: "hp" | "regen" | "tc",
+  mode: ModeSettings
+): void {
+  ensureContext();
+  if (voice === "hp" && scheme.hp.enabled) scheduleHp(scheme, mode.hp, 0);
+  if (voice === "regen" && scheme.regen.enabled) scheduleRegen(scheme, mode.regen, 0);
+  if (voice === "tc" && scheme.tc.enabled) scheduleTc(scheme, mode.tc, 0);
+}
+
+// Play just the mode-number chirps in isolation.
+export function playChirps(scheme: Scheme, modeNumber: number): void {
+  ensureContext();
+  if (!scheme.modeChirps.enabled) return;
+  const c = scheme.modeChirps;
+  for (let i = 0; i < modeNumber; i++) {
+    scheduleTone({
+      atMs: i * (c.chirpMs + c.gapMs),
+      durMs: c.chirpMs,
+      freqHz: c.pitchHz,
+      waveform: "square",
+      volume: c.volume,
+    });
+  }
+}
+
 function scheduleHp(scheme: Scheme, hp: number, atMs: number): number {
   const v = scheme.hp;
   const target = v.basePitchHz + (v.maxPitchHz - v.basePitchHz) * (hp / HP_MAX);
