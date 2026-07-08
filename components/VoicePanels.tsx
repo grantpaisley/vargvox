@@ -124,6 +124,20 @@ export default function VoicePanels({
     playModeSound(scheme, modes[previewMode - 1], previewMode);
   };
 
+  // Play the sound the current pane is editing — same thing the auto-play
+  // triggers on a slider change, but on demand.
+  const playCurrentPane = () => {
+    stopAll();
+    const kind = previewKindForTab;
+    if (kind === "reverse") playSignal({ ...scheme.reverse, loop: false });
+    else if (kind === "crawl") playSignal({ ...scheme.crawl, loop: false });
+    else if (kind === "hp" || kind === "regen" || kind === "tc") {
+      const vals = previewVals[kind];
+      if (vals.length > 0) playVoiceSequence(scheme, kind, vals);
+      else playVoice(scheme, kind, modes[previewMode - 1]);
+    } else playModeSound(scheme, modes[previewMode - 1], previewMode);
+  };
+
   const toggleVal = (voice: "hp" | "regen" | "tc", v: number) => {
     const selecting = !previewVals[voice].includes(v);
     setPreviewVals((prev) => {
@@ -194,15 +208,23 @@ export default function VoicePanels({
 
       <div className="space-y-4 rounded-lg border border-zinc-800 bg-zinc-900/60 p-4">
         {tab === "Modes" && (
-          <ModePanel
-            modes={modes}
-            scheme={scheme}
-            onChange={(nextModes, editedIndex) => {
-              onModesChange(nextModes);
-              setPreviewMode(editedIndex + 1);
-              schedulePreview("mode", scheme, nextModes, editedIndex + 1);
-            }}
-          />
+          <>
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs text-zinc-500">
+                Full sound for preview mode {previewMode}
+              </span>
+              <PlayPaneButton onClick={playCurrentPane} />
+            </div>
+            <ModePanel
+              modes={modes}
+              scheme={scheme}
+              onChange={(nextModes, editedIndex) => {
+                onModesChange(nextModes);
+                setPreviewMode(editedIndex + 1);
+                schedulePreview("mode", scheme, nextModes, editedIndex + 1);
+              }}
+            />
+          </>
         )}
 
         {tab === "HP" && (
@@ -213,12 +235,15 @@ export default function VoicePanels({
                 checked={scheme.hp.enabled}
                 onChange={(enabled) => set({ hp: { ...scheme.hp, enabled } })}
               />
-              <ValueChips
-                values={[0, 10, 20, 30, 40, 50, 60, 70, 80]}
-                selected={previewVals.hp}
-                onToggle={(v) => toggleVal("hp", v)}
-                unit="HP"
-              />
+              <div className="flex flex-wrap items-center gap-2">
+                <ValueChips
+                  values={[0, 10, 20, 30, 40, 50, 60, 70, 80]}
+                  selected={previewVals.hp}
+                  onToggle={(v) => toggleVal("hp", v)}
+                  unit="HP"
+                />
+                <PlayPaneButton onClick={playCurrentPane} />
+              </div>
             </div>
             <p className="text-xs text-zinc-500">
               A tone whose pitch scales with horsepower: 0 hp sits at the low pitch, 80 hp reaches
@@ -283,12 +308,15 @@ export default function VoicePanels({
                 checked={scheme.regen.enabled}
                 onChange={(enabled) => set({ regen: { ...scheme.regen, enabled } })}
               />
-              <ValueChips
-                values={[0, 20, 40, 60, 80, 100]}
-                selected={previewVals.regen}
-                onToggle={(v) => toggleVal("regen", v)}
-                unit="%"
-              />
+              <div className="flex flex-wrap items-center gap-2">
+                <ValueChips
+                  values={[0, 20, 40, 60, 80, 100]}
+                  selected={previewVals.regen}
+                  onToggle={(v) => toggleVal("regen", v)}
+                  unit="%"
+                />
+                <PlayPaneButton onClick={playCurrentPane} />
+              </div>
             </div>
             <p className="text-xs text-zinc-500">
               Engine-braking strength, 0–100%. Pulses: more regen = more pulses. Fall: more regen =
@@ -375,12 +403,15 @@ export default function VoicePanels({
                 checked={scheme.tc.enabled}
                 onChange={(enabled) => set({ tc: { ...scheme.tc, enabled } })}
               />
-              <ValueChips
-                values={[0, 20, 40, 60, 80, 100]}
-                selected={previewVals.tc}
-                onToggle={(v) => toggleVal("tc", v)}
-                unit="%"
-              />
+              <div className="flex flex-wrap items-center gap-2">
+                <ValueChips
+                  values={[0, 20, 40, 60, 80, 100]}
+                  selected={previewVals.tc}
+                  onToggle={(v) => toggleVal("tc", v)}
+                  unit="%"
+                />
+                <PlayPaneButton onClick={playCurrentPane} />
+              </div>
             </div>
             <p className="text-xs text-zinc-500">
               Traction control, 0–100%, as a run of short ticks: more TC = more ticks. 0% is
@@ -435,6 +466,7 @@ export default function VoicePanels({
             onChange={(reverse) => set({ reverse: { ...reverse, loop: true } }, "reverse")}
             lockLoop
             hint="The safety centerpiece. It repeats the whole time reverse is engaged — make it unmissable, like a truck's backup beeper."
+            onPlay={playCurrentPane}
           />
         )}
 
@@ -443,11 +475,18 @@ export default function VoicePanels({
             signal={scheme.crawl}
             onChange={(crawl) => set({ crawl }, "crawl")}
             hint="Walking-pace mode. Distinct from reverse but gentler."
+            onPlay={playCurrentPane}
           />
         )}
 
         {tab === "Extras" && (
           <>
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs text-zinc-500">
+                Full sound for preview mode {previewMode}
+              </span>
+              <PlayPaneButton onClick={playCurrentPane} />
+            </div>
             <div className="space-y-3 border-b border-zinc-800 pb-4">
               <Toggle
                 label="Mode-number chirps (mode 3 = three chirps)"
@@ -595,22 +634,42 @@ function ValueChips({
   );
 }
 
+function PlayPaneButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title="Play this pane's sound"
+      className="shrink-0 rounded bg-zinc-800 px-3 py-1.5 text-sm font-medium text-zinc-200 hover:bg-zinc-700"
+    >
+      ▶ Play
+    </button>
+  );
+}
+
 function FixedSignalEditor({
   signal,
   onChange,
   hint,
+  onPlay,
   lockLoop = false,
   compact = false,
 }: {
   signal: FixedSignal;
   onChange: (s: FixedSignal) => void;
   hint?: string;
+  onPlay?: () => void;
   lockLoop?: boolean;
   compact?: boolean;
 }) {
   return (
     <div className="space-y-4">
-      {hint && <p className="text-xs text-zinc-500">{hint}</p>}
+      {(hint || onPlay) && (
+        <div className="flex items-start justify-between gap-3">
+          <p className="text-xs text-zinc-500">{hint}</p>
+          {onPlay && <PlayPaneButton onClick={onPlay} />}
+        </div>
+      )}
       <Select
         label="Waveform"
         value={signal.waveform}
