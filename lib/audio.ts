@@ -3,7 +3,7 @@
 // can clip or blast the listener regardless of scheme values.
 
 import type { FixedSignal, ModeSettings, Scheme } from "./scheme";
-import { HP_MAX } from "./scheme";
+import { HP_MAX, signalSegments } from "./scheme";
 
 const MASTER_GAIN = 0.6;
 const ATTACK_S = 0.005;
@@ -129,15 +129,17 @@ export function playModeSound(
 
 // Play a single parameter voice in isolation — used by the editor so that
 // tweaking e.g. the HP tab auditions only the HP part of the sound.
+// Returns the duration in ms.
 export function playVoice(
   scheme: Scheme,
   voice: "hp" | "regen" | "tc",
   mode: ModeSettings
-): void {
+): number {
   ensureContext();
-  if (voice === "hp" && scheme.hp.enabled) scheduleHp(scheme, mode.hp, 0);
-  if (voice === "regen" && scheme.regen.enabled) scheduleRegen(scheme, mode.regen, 0);
-  if (voice === "tc" && scheme.tc.enabled) scheduleTc(scheme, mode.tc, 0);
+  if (voice === "hp" && scheme.hp.enabled) return scheduleHp(scheme, mode.hp, 0);
+  if (voice === "regen" && scheme.regen.enabled) return scheduleRegen(scheme, mode.regen, 0);
+  if (voice === "tc" && scheme.tc.enabled) return scheduleTc(scheme, mode.tc, 0);
+  return 0;
 }
 
 // Play one voice at several parameter values back-to-back (e.g. HP at
@@ -149,7 +151,7 @@ export function playVoiceSequence(
   voice: "hp" | "regen" | "tc",
   values: number[],
   gapMs = 280
-): void {
+): number {
   ensureContext();
   let cursor = 0;
   for (const value of values) {
@@ -159,12 +161,13 @@ export function playVoiceSequence(
     if (voice === "tc" && scheme.tc.enabled) len = scheduleTc(scheme, value, cursor);
     cursor += Math.max(len, 120) + gapMs;
   }
+  return Math.max(cursor - gapMs, 0);
 }
 
-// Play just the mode-number chirps in isolation.
-export function playChirps(scheme: Scheme, modeNumber: number): void {
+// Play just the mode-number chirps in isolation. Returns the duration in ms.
+export function playChirps(scheme: Scheme, modeNumber: number): number {
   ensureContext();
-  if (!scheme.modeChirps.enabled) return;
+  if (!scheme.modeChirps.enabled) return 0;
   const c = scheme.modeChirps;
   for (let i = 0; i < modeNumber; i++) {
     scheduleTone({
@@ -175,6 +178,7 @@ export function playChirps(scheme: Scheme, modeNumber: number): void {
       volume: c.volume,
     });
   }
+  return modeNumber * (c.chirpMs + c.gapMs) - c.gapMs;
 }
 
 function scheduleHp(scheme: Scheme, hp: number, atMs: number): number {
@@ -242,23 +246,47 @@ function scheduleTc(scheme: Scheme, tcPct: number, atMs: number): number {
 // ---------------------------------------------------------------------------
 
 function scheduleSignalOnce(sig: FixedSignal, atMs: number): number {
+  // signalSegments resolves the rhythm pattern, even defaults and any
+  // per-segment tweaks into one beep/gap timeline.
   let cursor = atMs;
-  for (let i = 0; i < sig.beeps; i++) {
-    const freq = sig.pitch2Hz > 0 && i % 2 === 1 ? sig.pitch2Hz : sig.pitchHz;
+  let end = atMs;
+  for (const seg of signalSegments(sig)) {
+    if (seg.kind === "gap") {
+      cursor += seg.durMs;
+      continue;
+    }
     scheduleTone({
       atMs: cursor,
-      durMs: sig.beepMs,
-      freqHz: freq,
+      durMs: seg.durMs,
+      freqHz: seg.startHz,
+      sweepToHz: seg.endHz !== seg.startHz ? seg.endHz : undefined,
       waveform: sig.waveform,
       volume: sig.volume,
     });
-    cursor += sig.beepMs + sig.gapMs;
+    end = cursor + seg.durMs;
+    cursor = end;
   }
-  return cursor - sig.gapMs - atMs;
+  return end - atMs;
 }
 
 export interface LoopHandle {
   stop: () => void;
+}
+
+// Editor preview of a fixed signal: looping signals play a couple of repeats
+// so the pause between them is audible; one-shots play once. Returns the
+// total duration in ms.
+export function playSignalPreview(sig: FixedSignal, repeats = 2): number {
+  if (!sig.enabled) return 0;
+  ensureContext();
+  const times = sig.loop ? repeats : 1;
+  let cursor = 0;
+  let end = 0;
+  for (let i = 0; i < times; i++) {
+    end = cursor + scheduleSignalOnce(sig, cursor);
+    cursor = end + sig.loopIntervalMs;
+  }
+  return end;
 }
 
 export function playSignal(sig: FixedSignal): LoopHandle {

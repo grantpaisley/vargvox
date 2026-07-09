@@ -22,7 +22,9 @@ export default function Switchgear({
   const [power, setPower] = useState(false);
   const [modeIndex, setModeIndex] = useState(0);
   const [state, setState] = useState<BikeState>("off");
+  const [honking, setHonking] = useState(false);
   const loopRef = useRef<LoopHandle | null>(null);
+  const hornRef = useRef<LoopHandle | null>(null);
 
   // If the scheme changes while a loop (reverse/crawl) is sounding, restart
   // the loop so edits are heard immediately.
@@ -40,6 +42,23 @@ export default function Switchgear({
   const stopLoop = () => {
     loopRef.current?.stop();
     loopRef.current = null;
+  };
+
+  // Horn: sounds while held, like the real thing.
+  const hornDown = () => {
+    if (!power || !scheme.horn.enabled) return;
+    hornRef.current?.stop();
+    hornRef.current = playSignal(scheme.horn);
+    setHonking(true);
+  };
+  const hornUp = () => {
+    if (!hornRef.current) return;
+    hornRef.current.stop();
+    hornRef.current = null;
+    setHonking(false);
+    // stop() kills every scheduled sound, so restart a mode loop if one was on.
+    if (state === "reverse") loopRef.current = playSignal(scheme.reverse);
+    else if (state === "crawl") loopRef.current = playSignal(scheme.crawl);
   };
 
   const enterMode = (index: number) => {
@@ -80,6 +99,8 @@ export default function Switchgear({
     if (power) {
       stopLoop();
       stopAll();
+      hornRef.current = null;
+      setHonking(false);
       setPower(false);
       setState("off");
     } else {
@@ -136,17 +157,34 @@ export default function Switchgear({
               ▼
             </PodButton>
           </div>
-          {/* Power button */}
-          <button
-            type="button"
-            onClick={togglePower}
-            aria-label="Power"
-            className={`h-14 w-14 rounded-full border-4 border-red-900/60 bg-gradient-to-br from-red-500 to-red-700 text-white shadow-inner transition-transform active:scale-95 ${
-              power ? "ring-4 ring-red-500/40" : "opacity-80"
-            }`}
-          >
-            ⏻
-          </button>
+          <div className="flex flex-col items-center gap-3">
+            {/* Power button */}
+            <button
+              type="button"
+              onClick={togglePower}
+              aria-label="Power"
+              className={`h-14 w-14 rounded-full border-4 border-red-900/60 bg-gradient-to-br from-red-500 to-red-700 text-white shadow-inner transition-transform active:scale-95 ${
+                power ? "ring-4 ring-red-500/40" : "opacity-80"
+              }`}
+            >
+              ⏻
+            </button>
+            {/* Horn: hold to sound */}
+            <button
+              type="button"
+              aria-label="Horn (hold to sound)"
+              title="Horn — hold to sound"
+              onPointerDown={hornDown}
+              onPointerUp={hornUp}
+              onPointerLeave={hornUp}
+              onContextMenu={(e) => e.preventDefault()}
+              className={`h-14 w-14 touch-none select-none rounded-full border-4 border-amber-900/60 bg-gradient-to-br from-amber-400 to-amber-600 text-[10px] font-bold tracking-wide text-amber-950 shadow-inner transition-transform ${
+                power ? "active:scale-95" : "cursor-not-allowed opacity-60"
+              } ${honking ? "ring-4 ring-amber-400/50" : ""}`}
+            >
+              HORN
+            </button>
+          </div>
         </div>
       </div>
 
@@ -155,7 +193,8 @@ export default function Switchgear({
         <span className="text-zinc-300">▼</span> for reverse — tap{" "}
         <span className="text-zinc-300">▲</span> to exit. Hold{" "}
         <span className="text-zinc-300">▲</span> for crawl — tap{" "}
-        <span className="text-zinc-300">▼</span> to exit.
+        <span className="text-zinc-300">▼</span> to exit. Hold{" "}
+        <span className="text-zinc-300">HORN</span> to sound the horn.
       </p>
     </div>
   );

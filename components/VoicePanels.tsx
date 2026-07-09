@@ -12,14 +12,15 @@ import type {
   FixedSignal,
   ModeSettings,
   Scheme,
+  SegmentTweak,
   VoiceOrder,
   Waveform,
 } from "@/lib/scheme";
-import { LIMITS } from "@/lib/scheme";
+import { LIMITS, signalSegments } from "@/lib/scheme";
 import {
   playChirps,
   playModeSound,
-  playSignal,
+  playSignalPreview,
   playVoice,
   playVoiceSequence,
   stopAll,
@@ -27,10 +28,19 @@ import {
 import ModePanel from "./ModePanel";
 import { Select, Slider, Toggle } from "./controls";
 
-const TABS = ["Modes", "HP", "Regen", "TC", "Reverse", "Crawl", "Extras"] as const;
+const TABS = ["Modes", "HP", "Regen", "TC", "Reverse", "Crawl", "Horn", "Extras"] as const;
 type Tab = (typeof TABS)[number];
 
-type PreviewKind = "mode" | "hp" | "regen" | "tc" | "chirps" | "reverse" | "crawl" | "powerOn";
+type PreviewKind =
+  | "mode"
+  | "hp"
+  | "regen"
+  | "tc"
+  | "chirps"
+  | "reverse"
+  | "crawl"
+  | "horn"
+  | "powerOn";
 
 const WAVE_OPTIONS: { value: Waveform; label: string }[] = [
   { value: "sine", label: "Sine (smooth)" },
@@ -69,6 +79,9 @@ export default function VoicePanels({
     tc: [],
   });
   const previewTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Progress sweep: while a preview sounds, a bar travels across the pane.
+  const [sweep, setSweep] = useState<{ id: number; ms: number } | null>(null);
+  const sweepId = useRef(0);
 
   useEffect(
     () => () => {
@@ -76,6 +89,33 @@ export default function VoicePanels({
     },
     []
   );
+
+  const startSweep = (ms: number) => {
+    if (ms <= 0) return;
+    sweepId.current += 1;
+    setSweep({ id: sweepId.current, ms });
+  };
+
+  // Play the sound a preview kind refers to and return its duration in ms.
+  // Looping signals audition two repeats so the pause between them is heard.
+  const playKind = (
+    kind: PreviewKind,
+    s: Scheme,
+    m: ModeSettings[],
+    modeNumber: number
+  ): number => {
+    if (kind === "reverse") return playSignalPreview(s.reverse);
+    if (kind === "crawl") return playSignalPreview(s.crawl);
+    if (kind === "horn") return playSignalPreview(s.horn);
+    if (kind === "powerOn") return playSignalPreview({ ...s.powerOn, loop: false });
+    if (kind === "chirps") return playChirps(s, modeNumber);
+    if (kind === "hp" || kind === "regen" || kind === "tc") {
+      const vals = previewVals[kind];
+      if (vals.length > 0) return playVoiceSequence(s, kind, vals);
+      return playVoice(s, kind, m[modeNumber - 1]);
+    }
+    return playModeSound(s, m[modeNumber - 1], modeNumber);
+  };
 
   // Debounced auto-play: fires once, shortly after the last control movement.
   const schedulePreview = (
@@ -87,15 +127,7 @@ export default function VoicePanels({
     if (previewTimer.current) clearTimeout(previewTimer.current);
     previewTimer.current = setTimeout(() => {
       stopAll();
-      if (kind === "reverse") playSignal({ ...nextScheme.reverse, loop: false });
-      else if (kind === "crawl") playSignal({ ...nextScheme.crawl, loop: false });
-      else if (kind === "powerOn") playSignal({ ...nextScheme.powerOn, loop: false });
-      else if (kind === "chirps") playChirps(nextScheme, modeNumber);
-      else if (kind === "hp" || kind === "regen" || kind === "tc") {
-        const vals = previewVals[kind];
-        if (vals.length > 0) playVoiceSequence(nextScheme, kind, vals);
-        else playVoice(nextScheme, kind, nextModes[modeNumber - 1]);
-      } else playModeSound(nextScheme, nextModes[modeNumber - 1], modeNumber);
+      startSweep(playKind(kind, nextScheme, nextModes, modeNumber));
     }, 250);
   };
 
@@ -111,7 +143,9 @@ export default function VoicePanels({
             ? "reverse"
             : tab === "Crawl"
               ? "crawl"
-              : "mode";
+              : tab === "Horn"
+                ? "horn"
+                : "mode";
 
   const set = (patch: Partial<Scheme>, kind: PreviewKind = previewKindForTab) => {
     const next = { ...scheme, ...patch };
@@ -121,21 +155,14 @@ export default function VoicePanels({
 
   const playPreview = () => {
     stopAll();
-    playModeSound(scheme, modes[previewMode - 1], previewMode);
+    startSweep(playModeSound(scheme, modes[previewMode - 1], previewMode));
   };
 
   // Play the sound the current pane is editing — same thing the auto-play
   // triggers on a slider change, but on demand.
   const playCurrentPane = () => {
     stopAll();
-    const kind = previewKindForTab;
-    if (kind === "reverse") playSignal({ ...scheme.reverse, loop: false });
-    else if (kind === "crawl") playSignal({ ...scheme.crawl, loop: false });
-    else if (kind === "hp" || kind === "regen" || kind === "tc") {
-      const vals = previewVals[kind];
-      if (vals.length > 0) playVoiceSequence(scheme, kind, vals);
-      else playVoice(scheme, kind, modes[previewMode - 1]);
-    } else playModeSound(scheme, modes[previewMode - 1], previewMode);
+    startSweep(playKind(previewKindForTab, scheme, modes, previewMode));
   };
 
   const toggleVal = (voice: "hp" | "regen" | "tc", v: number) => {
@@ -150,7 +177,7 @@ export default function VoicePanels({
     });
     if (selecting) {
       stopAll();
-      playVoice(scheme, voice, { hp: v, regen: v, tc: v });
+      startSweep(playVoice(scheme, voice, { hp: v, regen: v, tc: v }));
     }
   };
 
@@ -206,7 +233,17 @@ export default function VoicePanels({
         ))}
       </div>
 
-      <div className="space-y-4 rounded-lg border border-zinc-800 bg-zinc-900/60 p-4">
+      <div className="relative overflow-hidden rounded-lg border border-zinc-800 bg-zinc-900/60">
+        {/* Progress sweep: travels across the pane for the duration of the preview */}
+        {sweep && (
+          <div
+            key={sweep.id}
+            onAnimationEnd={() => setSweep(null)}
+            className="pointer-events-none absolute inset-y-0 left-0 z-10 w-0.5 bg-red-500/80 shadow-[0_0_8px_rgba(239,68,68,0.8)]"
+            style={{ animation: `panesweep ${sweep.ms}ms linear forwards` }}
+          />
+        )}
+        <div className="space-y-4 p-4">
         {/* Pane header: enable toggle for what this pane edits + its play button */}
         <div className="flex items-center justify-between gap-2">
           {tab === "Modes" && (
@@ -251,6 +288,13 @@ export default function VoicePanels({
               label="Crawl voice enabled"
               checked={scheme.crawl.enabled}
               onChange={(enabled) => set({ crawl: { ...scheme.crawl, enabled } }, "crawl")}
+            />
+          )}
+          {tab === "Horn" && (
+            <Toggle
+              label="Horn enabled"
+              checked={scheme.horn.enabled}
+              onChange={(enabled) => set({ horn: { ...scheme.horn, enabled } }, "horn")}
             />
           )}
           {tab === "Extras" && (
@@ -493,6 +537,15 @@ export default function VoicePanels({
           />
         )}
 
+        {tab === "Horn" && (
+          <FixedSignalEditor
+            signal={scheme.horn}
+            onChange={(horn) => set({ horn: { ...horn, loop: true } }, "horn")}
+            lockLoop
+            hint="Hold the HORN button on the switchgear to sound it — it repeats while held. Default: beluga-style rising chirps."
+          />
+        )}
+
         {tab === "Extras" && (
           <>
             <div className="space-y-3 border-b border-zinc-800 pb-4">
@@ -598,6 +651,7 @@ export default function VoicePanels({
             </div>
           </>
         )}
+        </div>
       </div>
     </div>
   );
@@ -662,6 +716,33 @@ function PlayPaneButton({
   );
 }
 
+// Rhythm pattern input: "." = beep, space = pause between groups.
+// e.g. ".. . .." beeps twice, once, twice. Empty = plain beep count.
+function PatternField({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <label className="block text-xs">
+      <div className="mb-1 flex items-baseline justify-between">
+        <span className="text-zinc-400">Rhythm (. = beep, space = pause)</span>
+        <span className="text-zinc-500">e.g. &quot;.. . ..&quot;</span>
+      </div>
+      <input
+        type="text"
+        value={value}
+        maxLength={16}
+        placeholder="empty = use beep count"
+        onChange={(e) => onChange(e.target.value.replace(/[^. ]/g, ""))}
+        className="w-full rounded border border-zinc-700 bg-zinc-900 px-2 py-1.5 font-mono text-sm tracking-[0.3em] text-zinc-200 placeholder:font-sans placeholder:tracking-normal placeholder:text-zinc-600"
+      />
+    </label>
+  );
+}
+
 function FixedSignalEditor({
   signal,
   onChange,
@@ -675,9 +756,124 @@ function FixedSignalEditor({
   lockLoop?: boolean;
   compact?: boolean;
 }) {
+  // Segment editing: click segments in the timeline to select them, then the
+  // sliders below shape just those. Tweaks are cleared if the rhythm changes.
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const segments = signalSegments(signal);
+  const selection = [...selected].filter((i) => i < segments.length).sort((a, b) => a - b);
+  const firstSel = selection.length > 0 ? segments[selection[0]] : null;
+  const firstBeepIdx = selection.find((i) => segments[i].kind === "beep");
+  const firstBeep = firstBeepIdx !== undefined ? segments[firstBeepIdx] : null;
+  const hasTweaks = signal.tweaks.some(Boolean);
+
+  const toggleSegment = (i: number) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(i)) next.delete(i);
+      else next.add(i);
+      return next;
+    });
+
+  const applyTweak = (patch: SegmentTweak, beepsOnly = false) => {
+    const tweaks = [...signal.tweaks];
+    for (const i of selection) {
+      if (beepsOnly && segments[i].kind !== "beep") continue;
+      tweaks[i] = { ...(tweaks[i] ?? {}), ...patch };
+    }
+    onChange({ ...signal, tweaks });
+  };
+
+  // Rhythm edits change the segment layout, so per-segment tweaks reset.
+  const changeRhythm = (patch: Partial<FixedSignal>) => {
+    setSelected(new Set());
+    onChange({ ...signal, ...patch, tweaks: [] });
+  };
+
   return (
     <div className="space-y-4">
       {hint && <p className="text-xs text-zinc-500">{hint}</p>}
+
+      {/* Timeline: one block per beep/gap, width proportional to duration */}
+      <div>
+        <div className="mb-1 flex items-baseline justify-between text-xs">
+          <span className="text-zinc-400">Timeline — click segments, then shape them below</span>
+          {hasTweaks && (
+            <button
+              type="button"
+              onClick={() => {
+                setSelected(new Set());
+                onChange({ ...signal, tweaks: [] });
+              }}
+              className="text-zinc-500 underline hover:text-zinc-300"
+            >
+              even out
+            </button>
+          )}
+        </div>
+        <div className="flex h-9 w-full items-stretch gap-px overflow-hidden rounded border border-zinc-700 bg-zinc-950 p-px">
+          {segments.map((seg, i) => (
+            <button
+              key={i}
+              type="button"
+              onClick={() => toggleSegment(i)}
+              title={
+                seg.kind === "beep"
+                  ? `Beep — ${Math.round(seg.durMs)} ms, ${Math.round(seg.startHz)}${
+                      seg.endHz !== seg.startHz ? `→${Math.round(seg.endHz)}` : ""
+                    } Hz`
+                  : `Gap — ${Math.round(seg.durMs)} ms`
+              }
+              style={{ flexGrow: Math.max(seg.durMs, 1), flexBasis: 0, minWidth: 10 }}
+              className={`rounded-sm transition-colors ${
+                seg.kind === "beep"
+                  ? selected.has(i)
+                    ? "bg-red-400 ring-2 ring-inset ring-white/70"
+                    : "bg-red-600/70 hover:bg-red-500"
+                  : selected.has(i)
+                    ? "bg-zinc-600 ring-2 ring-inset ring-white/40"
+                    : "bg-zinc-800/80 hover:bg-zinc-700"
+              }`}
+            />
+          ))}
+        </div>
+      </div>
+
+      {selection.length > 0 && firstSel && (
+        <div className="space-y-3 rounded border border-zinc-700/70 bg-zinc-950/60 p-3">
+          <p className="text-[10px] uppercase tracking-wide text-zinc-500">
+            {selection.length} segment{selection.length > 1 ? "s" : ""} selected
+          </p>
+          <Slider
+            label="Length"
+            value={Math.round(firstSel.durMs)}
+            min={0}
+            max={800}
+            step={5}
+            unit=" ms"
+            onChange={(durMs) => applyTweak({ durMs })}
+          />
+          {firstBeep && (
+            <>
+              <Slider
+                label="Pitch start"
+                value={Math.round(firstBeep.startHz)}
+                min={LIMITS.pitchHz.min}
+                max={LIMITS.pitchHz.max}
+                unit=" Hz"
+                onChange={(startHz) => applyTweak({ startHz }, true)}
+              />
+              <Slider
+                label="Pitch end"
+                value={Math.round(firstBeep.endHz)}
+                min={LIMITS.pitchHz.min}
+                max={LIMITS.pitchHz.max}
+                unit=" Hz"
+                onChange={(endHz) => applyTweak({ endHz }, true)}
+              />
+            </>
+          )}
+        </div>
+      )}
       <Select
         label="Waveform"
         value={signal.waveform}
@@ -706,12 +902,31 @@ function FixedSignalEditor({
         }
       />
       <Slider
-        label="Beeps per burst"
-        value={signal.beeps}
-        min={LIMITS.beeps.min}
-        max={LIMITS.beeps.max}
-        onChange={(beeps) => onChange({ ...signal, beeps })}
+        label="Sweep to (0 = off, each beep glides here)"
+        value={signal.sweepHz}
+        min={0}
+        max={LIMITS.pitchHz.max}
+        unit=" Hz"
+        onChange={(sweepHz) =>
+          onChange({
+            ...signal,
+            sweepHz: sweepHz < LIMITS.pitchHz.min ? 0 : sweepHz,
+          })
+        }
       />
+      <PatternField
+        value={signal.pattern}
+        onChange={(pattern) => changeRhythm({ pattern })}
+      />
+      {!signal.pattern.includes(".") && (
+        <Slider
+          label="Beeps per burst"
+          value={signal.beeps}
+          min={LIMITS.beeps.min}
+          max={LIMITS.beeps.max}
+          onChange={(beeps) => changeRhythm({ beeps })}
+        />
+      )}
       <Slider
         label="Beep length"
         value={signal.beepMs}
@@ -722,7 +937,7 @@ function FixedSignalEditor({
         onChange={(beepMs) => onChange({ ...signal, beepMs })}
       />
       <Slider
-        label="Gap within burst"
+        label="Gap between beeps"
         value={signal.gapMs}
         min={0}
         max={500}
@@ -730,6 +945,17 @@ function FixedSignalEditor({
         unit=" ms"
         onChange={(gapMs) => onChange({ ...signal, gapMs })}
       />
+      {signal.pattern.includes(" ") && signal.pattern.includes(".") && (
+        <Slider
+          label="Gap between groups (each space in the rhythm)"
+          value={signal.groupGapMs}
+          min={0}
+          max={1000}
+          step={10}
+          unit=" ms"
+          onChange={(groupGapMs) => onChange({ ...signal, groupGapMs })}
+        />
+      )}
       {!compact && (
         <>
           {!lockLoop && (

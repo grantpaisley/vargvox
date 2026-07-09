@@ -35,17 +35,74 @@ export interface TcVoice {
   volume: number;
 }
 
+// Per-segment override on top of the signal's even defaults. Indexed by the
+// segment's position in signalSegments() — beeps and gaps interleaved.
+export interface SegmentTweak {
+  durMs?: number;
+  startHz?: number; // beeps only
+  endHz?: number; // beeps only
+}
+
 export interface FixedSignal {
   enabled: boolean;
   waveform: Waveform;
   pitchHz: number;
   pitch2Hz: number; // 0 = single pitch; otherwise beeps alternate pitch/pitch2
+  sweepHz: number; // 0 = off; otherwise every beep glides from pitchHz to this
   beeps: number;
+  pattern: string; // rhythm like ".. . .." — overrides beeps when it has any "."
   beepMs: number;
   gapMs: number;
+  groupGapMs: number; // silence for each space in the pattern
+  tweaks: (SegmentTweak | null)[]; // sparse; cleared when the rhythm changes
   loop: boolean;
   loopIntervalMs: number; // silence between repeats while engaged
   volume: number;
+}
+
+// The rendered timeline of one burst: beeps and the gaps between them, with
+// the even defaults from the signal and any per-segment tweaks applied.
+// Single source of truth for both the audio engine and the segment editor.
+export interface SignalSegment {
+  kind: "beep" | "gap";
+  durMs: number;
+  startHz: number; // gaps ignore the pitches
+  endHz: number;
+}
+
+export function signalSegments(sig: FixedSignal): SignalSegment[] {
+  const pattern = sig.pattern.includes(".") ? sig.pattern : ".".repeat(sig.beeps);
+  const segments: SignalSegment[] = [];
+  let pendingGap = 0;
+  let beepIndex = 0;
+  for (const ch of pattern) {
+    if (ch !== ".") {
+      pendingGap += sig.groupGapMs;
+      continue;
+    }
+    if (beepIndex > 0) {
+      segments.push({ kind: "gap", durMs: sig.gapMs + pendingGap, startHz: 0, endHz: 0 });
+    }
+    pendingGap = 0;
+    const base = sig.pitch2Hz > 0 && beepIndex % 2 === 1 ? sig.pitch2Hz : sig.pitchHz;
+    segments.push({
+      kind: "beep",
+      durMs: sig.beepMs,
+      startHz: base,
+      endHz: sig.sweepHz > 0 ? sig.sweepHz : base,
+    });
+    beepIndex++;
+  }
+  return segments.map((seg, i) => {
+    const t = sig.tweaks[i];
+    if (!t) return seg;
+    return {
+      ...seg,
+      durMs: t.durMs ?? seg.durMs,
+      startHz: seg.kind === "beep" ? (t.startHz ?? seg.startHz) : seg.startHz,
+      endHz: seg.kind === "beep" ? (t.endHz ?? seg.endHz) : seg.endHz,
+    };
+  });
 }
 
 export interface ModeChirps {
@@ -70,6 +127,7 @@ export interface Scheme {
   tc: TcVoice;
   reverse: FixedSignal;
   crawl: FixedSignal;
+  horn: FixedSignal; // rider-triggered; loops while the horn button is held
   powerOn: PowerOnSignal;
 }
 
@@ -140,9 +198,13 @@ export function defaultScheme(): Scheme {
       waveform: "square",
       pitchHz: 950,
       pitch2Hz: 0,
+      sweepHz: 0,
       beeps: 1,
+      pattern: "",
       beepMs: 300,
       gapMs: 0,
+      groupGapMs: 200,
+      tweaks: [],
       loop: true,
       loopIntervalMs: 300,
       volume: 0.7,
@@ -152,21 +214,46 @@ export function defaultScheme(): Scheme {
       waveform: "sine",
       pitchHz: 500,
       pitch2Hz: 650,
+      sweepHz: 0,
       beeps: 2,
+      pattern: "",
       beepMs: 120,
       gapMs: 80,
+      groupGapMs: 200,
+      tweaks: [],
       loop: true,
       loopIntervalMs: 700,
       volume: 0.45,
+    },
+    // Beluga-ish: quick squeaky chirps, each sweeping up like whale song.
+    horn: {
+      enabled: true,
+      waveform: "sine",
+      pitchHz: 480,
+      pitch2Hz: 0,
+      sweepHz: 1600,
+      beeps: 3,
+      pattern: "",
+      beepMs: 160,
+      gapMs: 50,
+      groupGapMs: 200,
+      tweaks: [],
+      loop: true,
+      loopIntervalMs: 120,
+      volume: 0.7,
     },
     powerOn: {
       enabled: true,
       waveform: "sine",
       pitchHz: 620,
       pitch2Hz: 930,
+      sweepHz: 0,
       beeps: 2,
+      pattern: "",
       beepMs: 110,
       gapMs: 40,
+      groupGapMs: 200,
+      tweaks: [],
       loop: false,
       loopIntervalMs: 0,
       volume: 0.5,
@@ -184,6 +271,18 @@ export function defaultModes(): ModeSettings[] {
   ];
 }
 
+function sanitizeTweak(raw: unknown): SegmentTweak | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const t = raw as Record<string, unknown>;
+  const out: SegmentTweak = {};
+  if (typeof t.durMs === "number") out.durMs = clamp(t.durMs, 0, 2000);
+  if (typeof t.startHz === "number")
+    out.startHz = clamp(t.startHz, LIMITS.pitchHz.min, LIMITS.pitchHz.max);
+  if (typeof t.endHz === "number")
+    out.endHz = clamp(t.endHz, LIMITS.pitchHz.min, LIMITS.pitchHz.max);
+  return Object.keys(out).length > 0 ? out : null;
+}
+
 function sanitizeFixedSignal(raw: unknown, fallback: FixedSignal): FixedSignal {
   const s = (raw ?? {}) as Record<string, unknown>;
   const n = (v: unknown, fb: number) => (typeof v === "number" ? v : fb);
@@ -195,9 +294,19 @@ function sanitizeFixedSignal(raw: unknown, fallback: FixedSignal): FixedSignal {
       n(s.pitch2Hz, fallback.pitch2Hz) === 0
         ? 0
         : clamp(n(s.pitch2Hz, fallback.pitch2Hz), LIMITS.pitchHz.min, LIMITS.pitchHz.max),
+    sweepHz:
+      n(s.sweepHz, fallback.sweepHz) === 0
+        ? 0
+        : clamp(n(s.sweepHz, fallback.sweepHz), LIMITS.pitchHz.min, LIMITS.pitchHz.max),
     beeps: Math.round(clamp(n(s.beeps, fallback.beeps), LIMITS.beeps.min, LIMITS.beeps.max)),
+    pattern:
+      typeof s.pattern === "string"
+        ? s.pattern.replace(/[^. ]/g, "").slice(0, 16)
+        : fallback.pattern,
     beepMs: clamp(n(s.beepMs, fallback.beepMs), LIMITS.durationMs.min, LIMITS.durationMs.max),
     gapMs: clamp(n(s.gapMs, fallback.gapMs), LIMITS.gapMs.min, LIMITS.gapMs.max),
+    groupGapMs: clamp(n(s.groupGapMs, fallback.groupGapMs), 0, 2000),
+    tweaks: Array.isArray(s.tweaks) ? s.tweaks.slice(0, 32).map(sanitizeTweak) : [],
     loop: typeof s.loop === "boolean" ? s.loop : fallback.loop,
     loopIntervalMs: clamp(n(s.loopIntervalMs, fallback.loopIntervalMs), 0, 2000),
     volume: clamp(n(s.volume, fallback.volume), LIMITS.volume.min, LIMITS.volume.max),
@@ -271,6 +380,7 @@ export function sanitizeScheme(raw: unknown): Scheme {
     },
     reverse: { ...sanitizeFixedSignal(r.reverse, d.reverse), loop: true },
     crawl: sanitizeFixedSignal(r.crawl, d.crawl),
+    horn: { ...sanitizeFixedSignal(r.horn, d.horn), loop: true },
     powerOn: { ...sanitizeFixedSignal(r.powerOn, d.powerOn), loop: false },
   };
 }

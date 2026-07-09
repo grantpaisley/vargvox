@@ -25,6 +25,16 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
+/* Preview progress bar travelling across the editor pane */
+@keyframes panesweep {
+  from {
+    left: 0%;
+  }
+  to {
+    left: 100%;
+  }
+}
+
 /* Hold-to-activate progress ring on the switchgear buttons */
 @keyframes holdring {
   from {

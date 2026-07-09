@@ -5,6 +5,7 @@
 import { useRef, useState } from "react";
 import type { Scheme } from "@/lib/scheme";
 import { importSchemeFile, type SavedScheme } from "@/lib/storage";
+import { PRESETS } from "@/lib/presets";
 import { Button } from "./controls";
 
 export default function TopBar({
@@ -34,6 +35,7 @@ export default function TopBar({
 }) {
   const fileInput = useRef<HTMLInputElement>(null);
   const [libraryOpen, setLibraryOpen] = useState(false);
+  const [presetsOpen, setPresetsOpen] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
 
   return (
@@ -96,6 +98,32 @@ export default function TopBar({
                       ✕
                     </button>
                   </div>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="relative">
+            <Button
+              onClick={() => setPresetsOpen((o) => !o)}
+              title="Load an example sound set"
+            >
+              Presets
+            </Button>
+            {presetsOpen && (
+              <div className="absolute right-0 z-20 mt-1 w-72 rounded-lg border border-zinc-700 bg-zinc-900 p-2 shadow-xl">
+                {PRESETS.map((preset) => (
+                  <button
+                    key={preset.name}
+                    type="button"
+                    className="block w-full rounded px-2 py-1.5 text-left hover:bg-zinc-800"
+                    onClick={() => {
+                      onImport(preset.scheme);
+                      setPresetsOpen(false);
+                    }}
+                  >
+                    <span className="block text-sm text-zinc-200">{preset.name}</span>
+                    <span className="block text-xs text-zinc-500">{preset.description}</span>
+                  </button>
                 ))}
               </div>
             )}
