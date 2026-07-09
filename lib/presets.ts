@@ -138,6 +138,213 @@ export const PRESETS: Preset[] = [
     }),
   },
   {
+    name: "Riser",
+    description: "Everything sweeps upward — rising chirps, signals, horn and TC ramp.",
+    scheme: make("Riser", (s) => {
+      s.modeChirps = {
+        ...s.modeChirps,
+        waveform: "triangle",
+        pitchHz: 900,
+        sweepHz: 1800,
+        beepMs: 45,
+        gapMs: 60,
+      };
+      s.hp = {
+        ...s.hp,
+        waveform: "sine",
+        basePitchHz: 250,
+        maxPitchHz: 2200,
+        durationMs: 450,
+        sweep: "rise",
+        volume: 0.6,
+      };
+      s.regen = { ...s.regen, style: "pulses", waveform: "triangle", pitchHz: 300 };
+      s.tc = { ...s.tc, pitchHz: 1500, endPitchHz: 3800, tickMs: 15, gapMs: 55 };
+      s.reverse = { ...s.reverse, pitchHz: 700, sweepHz: 1400, beepMs: 350, loopIntervalMs: 250 };
+      s.crawl = { ...s.crawl, waveform: "sine", pitchHz: 400, pitch2Hz: 0, sweepHz: 700 };
+      s.horn = { ...s.horn, pitchHz: 500, sweepHz: 2000, beeps: 2, beepMs: 300, gapMs: 80 };
+      s.powerOn = {
+        ...s.powerOn,
+        pitchHz: 350,
+        pitch2Hz: 0,
+        sweepHz: 1600,
+        beeps: 1,
+        beepMs: 500,
+      };
+    }),
+  },
+  {
+    name: "Deep Descent",
+    description: "Falling sweeps everywhere — foghorn, sinking power-on, TC ramps down.",
+    scheme: make("Deep Descent", (s) => {
+      s.modeChirps = { ...s.modeChirps, pitchHz: 2000, sweepHz: 1200, beepMs: 45 };
+      s.hp = { ...s.hp, waveform: "triangle", sweep: "flat", durationMs: 420, volume: 0.6 };
+      s.regen = { ...s.regen, style: "fall", waveform: "sine", pitchHz: 1100, fallDurationMs: 420 };
+      s.tc = { ...s.tc, pitchHz: 3800, endPitchHz: 2000 };
+      s.reverse = { ...s.reverse, pitchHz: 1200, sweepHz: 800, beepMs: 320 };
+      s.crawl = { ...s.crawl, waveform: "sine", pitchHz: 700, pitch2Hz: 0, sweepHz: 450 };
+      s.horn = {
+        ...s.horn,
+        waveform: "sawtooth",
+        pitchHz: 1300,
+        sweepHz: 400,
+        beeps: 1,
+        beepMs: 500,
+        loopIntervalMs: 150,
+        volume: 0.65,
+      };
+      s.powerOn = {
+        ...s.powerOn,
+        pitchHz: 1500,
+        pitch2Hz: 0,
+        sweepHz: 500,
+        beeps: 1,
+        beepMs: 450,
+      };
+    }),
+  },
+  {
+    name: "Two-Tone Klaxon",
+    description: "Alternating hi-lo pairs, like a European siren.",
+    scheme: make("Two-Tone Klaxon", (s) => {
+      s.modeChirps = { ...s.modeChirps, pitchHz: 1400, pitch2Hz: 2100, beepMs: 45, gapMs: 55 };
+      s.hp = {
+        ...s.hp,
+        waveform: "square",
+        basePitchHz: 200,
+        maxPitchHz: 1400,
+        durationMs: 320,
+        volume: 0.55,
+      };
+      s.tc = { ...s.tc, pitchHz: 3200 };
+      s.reverse = {
+        ...s.reverse,
+        pitchHz: 800,
+        pitch2Hz: 1100,
+        beeps: 2,
+        beepMs: 200,
+        gapMs: 40,
+        loopIntervalMs: 200,
+      };
+      s.crawl = { ...s.crawl, pitchHz: 550, pitch2Hz: 750, beeps: 2, beepMs: 160 };
+      s.horn = {
+        ...s.horn,
+        waveform: "square",
+        pitchHz: 700,
+        pitch2Hz: 880,
+        sweepHz: 0,
+        beeps: 4,
+        beepMs: 150,
+        gapMs: 30,
+        loopIntervalMs: 80,
+        volume: 0.75,
+      };
+    }),
+  },
+  {
+    name: "Morse Rider",
+    description: "Dot-dash rhythms — dashes made by stretching segments.",
+    scheme: make("Morse Rider", (s) => {
+      s.modeChirps = { ...s.modeChirps, pitchHz: 1900, beepMs: 40, gapMs: 90 };
+      s.hp = { ...s.hp, waveform: "sine", sweep: "flat", durationMs: 300 };
+      s.regen = { ...s.regen, style: "pulses", pitchHz: 190 };
+      s.tc = { ...s.tc, pitchHz: 2900 };
+      s.crawl = { ...s.crawl, pitch2Hz: 0, pattern: ".. .", groupGapMs: 220, beepMs: 90 };
+      // Horn spells "R" (dot dash dot): middle beep stretched into a dash.
+      s.horn = {
+        ...s.horn,
+        waveform: "square",
+        pitchHz: 900,
+        sweepHz: 0,
+        pattern: "...",
+        beepMs: 90,
+        gapMs: 70,
+        loopIntervalMs: 350,
+        tweaks: [null, null, { durMs: 270 }],
+        volume: 0.7,
+      };
+      s.powerOn = {
+        ...s.powerOn,
+        pitch2Hz: 0,
+        pattern: ". .",
+        beepMs: 90,
+        groupGapMs: 200,
+      };
+    }),
+  },
+  {
+    name: "Droid Chatter",
+    description: "Quick squeaks sweeping up and down — expressive little robot noises.",
+    scheme: make("Droid Chatter", (s) => {
+      s.modeChirps = {
+        ...s.modeChirps,
+        waveform: "sine",
+        pitchHz: 2600,
+        sweepHz: 3400,
+        beepMs: 28,
+        gapMs: 55,
+        volume: 0.45,
+      };
+      s.hp = {
+        ...s.hp,
+        waveform: "sine",
+        basePitchHz: 500,
+        maxPitchHz: 3000,
+        durationMs: 300,
+        volume: 0.55,
+      };
+      s.regen = {
+        ...s.regen,
+        style: "pulses",
+        waveform: "triangle",
+        pitchHz: 800,
+        pulseMs: 45,
+        gapMs: 45,
+      };
+      s.tc = { ...s.tc, pitchHz: 2400, endPitchHz: 4200, tickMs: 10, gapMs: 45 };
+      s.reverse = { ...s.reverse, waveform: "triangle", pitchHz: 1000, sweepHz: 1300, beepMs: 260 };
+      s.crawl = {
+        ...s.crawl,
+        waveform: "sine",
+        pitchHz: 900,
+        pitch2Hz: 0,
+        sweepHz: 1400,
+        beeps: 2,
+        beepMs: 100,
+        gapMs: 60,
+      };
+      // Squeaks alternate up/down via per-beep pitch tweaks (beeps 2 & 4).
+      s.horn = {
+        ...s.horn,
+        pitchHz: 1200,
+        sweepHz: 2400,
+        beeps: 4,
+        beepMs: 110,
+        gapMs: 45,
+        loopIntervalMs: 100,
+        tweaks: [
+          null,
+          null,
+          { startHz: 2200, endHz: 900 },
+          null,
+          null,
+          null,
+          { startHz: 2600, endHz: 1100 },
+        ],
+      };
+      s.powerOn = {
+        ...s.powerOn,
+        pitchHz: 800,
+        pitch2Hz: 0,
+        sweepHz: 2600,
+        beeps: 3,
+        beepMs: 90,
+        gapMs: 50,
+        tweaks: [null, null, null, null, { startHz: 2600, endHz: 1200 }],
+      };
+    }),
+  },
+  {
     name: "Beluga Pod",
     description: "Whale-song sweeps on every voice — squeaks, trills and falls.",
     scheme: make("Beluga Pod", (s) => {
