@@ -13,9 +13,21 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://vargvox.com"),
   title: "VargVox — sounds for the Stark Varg",
   description:
     "Community-designed audible ride-mode feedback for the Stark Varg. Design, hear and share mode sounds.",
+  alternates: {
+    canonical: "/",
+  },
+  openGraph: {
+    title: "VargVox — sounds for the Stark Varg",
+    description:
+      "Community-designed audible ride-mode feedback for the Stark Varg. Design, hear and share mode sounds.",
+    url: "/",
+    siteName: "VargVox",
+    type: "website",
+  },
 };
 
 export default function RootLayout({
