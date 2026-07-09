@@ -28,7 +28,7 @@ import {
 import ModePanel from "./ModePanel";
 import { Select, Slider, Toggle } from "./controls";
 
-const TABS = ["Modes", "HP", "Regen", "TC", "Reverse", "Crawl", "Horn", "Extras"] as const;
+const TABS = ["Modes", "Chirp", "HP", "Regen", "TC", "Reverse", "Crawl", "Horn", "Power"] as const;
 type Tab = (typeof TABS)[number];
 
 type PreviewKind =
@@ -133,19 +133,23 @@ export default function VoicePanels({
 
   // Editing a tab auditions only that part of the sound.
   const previewKindForTab: PreviewKind =
-    tab === "HP"
-      ? "hp"
-      : tab === "Regen"
-        ? "regen"
-        : tab === "TC"
-          ? "tc"
-          : tab === "Reverse"
-            ? "reverse"
-            : tab === "Crawl"
-              ? "crawl"
-              : tab === "Horn"
-                ? "horn"
-                : "mode";
+    tab === "Chirp"
+      ? "chirps"
+      : tab === "HP"
+        ? "hp"
+        : tab === "Regen"
+          ? "regen"
+          : tab === "TC"
+            ? "tc"
+            : tab === "Reverse"
+              ? "reverse"
+              : tab === "Crawl"
+                ? "crawl"
+                : tab === "Horn"
+                  ? "horn"
+                  : tab === "Power"
+                    ? "powerOn"
+                    : "mode";
 
   const set = (patch: Partial<Scheme>, kind: PreviewKind = previewKindForTab) => {
     const next = { ...scheme, ...patch };
@@ -247,8 +251,11 @@ export default function VoicePanels({
         {/* Pane header: enable toggle for what this pane edits + its play button */}
         <div className="flex items-center justify-between gap-2">
           {tab === "Modes" && (
+            <span className="text-sm font-medium text-zinc-300">Mode slots & sequence</span>
+          )}
+          {tab === "Chirp" && (
             <Toggle
-              label="Mode voice enabled (chirps: mode 3 = three chirps)"
+              label="Mode chirps enabled (mode 3 = three chirps)"
               checked={scheme.modeChirps.enabled}
               onChange={(enabled) =>
                 set({ modeChirps: { ...scheme.modeChirps, enabled } }, "chirps")
@@ -297,8 +304,12 @@ export default function VoicePanels({
               onChange={(enabled) => set({ horn: { ...scheme.horn, enabled } }, "horn")}
             />
           )}
-          {tab === "Extras" && (
-            <span className="text-sm font-medium text-zinc-300">Extras</span>
+          {tab === "Power" && (
+            <Toggle
+              label="Power-on sound enabled"
+              checked={scheme.powerOn.enabled}
+              onChange={(enabled) => set({ powerOn: { ...scheme.powerOn, enabled } }, "powerOn")}
+            />
           )}
           <PlayPaneButton onClick={playCurrentPane} />
         </div>
@@ -314,7 +325,49 @@ export default function VoicePanels({
                 schedulePreview("mode", scheme, nextModes, editedIndex + 1);
               }}
             />
+            <div className="space-y-3 border-t border-zinc-800 pt-4">
+              <Select
+                label="Voice order"
+                value={scheme.sequence.order.join(",")}
+                options={ORDER_OPTIONS}
+                onChange={(v) =>
+                  set({
+                    sequence: { ...scheme.sequence, order: v.split(",") as VoiceOrder[] },
+                  })
+                }
+              />
+              <Toggle
+                label="Layer voices (play together instead of in sequence)"
+                checked={scheme.sequence.layered}
+                onChange={(layered) => set({ sequence: { ...scheme.sequence, layered } })}
+              />
+              <Slider
+                label="Gap between voices"
+                value={scheme.sequence.gapMs}
+                min={0}
+                max={500}
+                step={10}
+                unit=" ms"
+                onChange={(gapMs) => set({ sequence: { ...scheme.sequence, gapMs } })}
+              />
+            </div>
           </>
+        )}
+
+        {tab === "Chirp" && (
+          <FixedSignalEditor
+            signal={scheme.modeChirps}
+            onChange={(modeChirps) =>
+              set(
+                { modeChirps: { ...modeChirps, beeps: 5, pattern: "", loop: false } },
+                "chirps"
+              )
+            }
+            fixedRhythm
+            lockLoop
+            compact
+            hint="Mode number = chirp count: mode 3 plays the first three of these five chirps. Set the preview mode to 5 to hear and shape all of them."
+          />
         )}
 
         {tab === "HP" && (
@@ -477,14 +530,31 @@ export default function VoicePanels({
               Traction control, 0–100%, as a run of short ticks: more TC = more ticks. 0% is
               silent.
             </p>
-            <Slider
-              label="Tick pitch"
-              value={scheme.tc.pitchHz}
-              min={800}
-              max={LIMITS.pitchHz.max}
-              unit=" Hz"
-              onChange={(pitchHz) => set({ tc: { ...scheme.tc, pitchHz } })}
-            />
+            <div className="grid grid-cols-2 gap-3">
+              <Slider
+                label="Tick pitch — start"
+                value={scheme.tc.pitchHz}
+                min={800}
+                max={LIMITS.pitchHz.max}
+                unit=" Hz"
+                onChange={(pitchHz) => set({ tc: { ...scheme.tc, pitchHz } })}
+              />
+              <Slider
+                label="finish (0 = flat)"
+                value={scheme.tc.endPitchHz}
+                min={0}
+                max={LIMITS.pitchHz.max}
+                unit=" Hz"
+                onChange={(endPitchHz) =>
+                  set({
+                    tc: {
+                      ...scheme.tc,
+                      endPitchHz: endPitchHz < LIMITS.pitchHz.min ? 0 : endPitchHz,
+                    },
+                  })
+                }
+              />
+            </div>
             <Slider
               label="Ticks at 100%"
               value={scheme.tc.maxTicks}
@@ -546,110 +616,14 @@ export default function VoicePanels({
           />
         )}
 
-        {tab === "Extras" && (
-          <>
-            <div className="space-y-3 border-b border-zinc-800 pb-4">
-              <Toggle
-                label="Mode-number chirps (mode 3 = three chirps)"
-                checked={scheme.modeChirps.enabled}
-                onChange={(enabled) =>
-                  set({ modeChirps: { ...scheme.modeChirps, enabled } }, "chirps")
-                }
-              />
-              {scheme.modeChirps.enabled && (
-                <>
-                  <Slider
-                    label="Chirp pitch"
-                    value={scheme.modeChirps.pitchHz}
-                    min={500}
-                    max={LIMITS.pitchHz.max}
-                    unit=" Hz"
-                    onChange={(pitchHz) =>
-                      set({ modeChirps: { ...scheme.modeChirps, pitchHz } }, "chirps")
-                    }
-                  />
-                  <Slider
-                    label="Chirp length"
-                    value={scheme.modeChirps.chirpMs}
-                    min={10}
-                    max={150}
-                    unit=" ms"
-                    onChange={(chirpMs) =>
-                      set({ modeChirps: { ...scheme.modeChirps, chirpMs } }, "chirps")
-                    }
-                  />
-                  <Slider
-                    label="Gap"
-                    value={scheme.modeChirps.gapMs}
-                    min={20}
-                    max={300}
-                    step={5}
-                    unit=" ms"
-                    onChange={(gapMs) =>
-                      set({ modeChirps: { ...scheme.modeChirps, gapMs } }, "chirps")
-                    }
-                  />
-                  <Slider
-                    label="Volume"
-                    value={scheme.modeChirps.volume}
-                    min={0}
-                    max={1}
-                    step={0.05}
-                    onChange={(volume) =>
-                      set({ modeChirps: { ...scheme.modeChirps, volume } }, "chirps")
-                    }
-                  />
-                </>
-              )}
-            </div>
-
-            <div className="space-y-3 border-b border-zinc-800 pb-4">
-              <Select
-                label="Voice order"
-                value={scheme.sequence.order.join(",")}
-                options={ORDER_OPTIONS}
-                onChange={(v) =>
-                  set({
-                    sequence: { ...scheme.sequence, order: v.split(",") as VoiceOrder[] },
-                  })
-                }
-              />
-              <Toggle
-                label="Layer voices (play together instead of in sequence)"
-                checked={scheme.sequence.layered}
-                onChange={(layered) => set({ sequence: { ...scheme.sequence, layered } })}
-              />
-              <Slider
-                label="Gap between voices"
-                value={scheme.sequence.gapMs}
-                min={0}
-                max={500}
-                step={10}
-                unit=" ms"
-                onChange={(gapMs) => set({ sequence: { ...scheme.sequence, gapMs } })}
-              />
-            </div>
-
-            <div className="space-y-3">
-              <Toggle
-                label="Power-on sound"
-                checked={scheme.powerOn.enabled}
-                onChange={(enabled) =>
-                  set({ powerOn: { ...scheme.powerOn, enabled } }, "powerOn")
-                }
-              />
-              {scheme.powerOn.enabled && (
-                <FixedSignalEditor
-                  signal={scheme.powerOn}
-                  onChange={(s) =>
-                    set({ powerOn: { ...scheme.powerOn, ...s, loop: false } }, "powerOn")
-                  }
-                  lockLoop
-                  compact
-                />
-              )}
-            </div>
-          </>
+        {tab === "Power" && (
+          <FixedSignalEditor
+            signal={scheme.powerOn}
+            onChange={(s) => set({ powerOn: { ...s, loop: false } }, "powerOn")}
+            lockLoop
+            compact
+            hint="Played once when the bike powers on."
+          />
         )}
         </div>
       </div>
@@ -749,12 +723,14 @@ function FixedSignalEditor({
   hint,
   lockLoop = false,
   compact = false,
+  fixedRhythm = false,
 }: {
   signal: FixedSignal;
   onChange: (s: FixedSignal) => void;
   hint?: string;
   lockLoop?: boolean;
   compact?: boolean;
+  fixedRhythm?: boolean; // beep count is fixed (mode chirps): hide rhythm controls
 }) {
   // Segment editing: click segments in the timeline to select them, then the
   // sliders below shape just those. Tweaks are cleared if the rhythm changes.
@@ -914,18 +890,22 @@ function FixedSignalEditor({
           })
         }
       />
-      <PatternField
-        value={signal.pattern}
-        onChange={(pattern) => changeRhythm({ pattern })}
-      />
-      {!signal.pattern.includes(".") && (
-        <Slider
-          label="Beeps per burst"
-          value={signal.beeps}
-          min={LIMITS.beeps.min}
-          max={LIMITS.beeps.max}
-          onChange={(beeps) => changeRhythm({ beeps })}
-        />
+      {!fixedRhythm && (
+        <>
+          <PatternField
+            value={signal.pattern}
+            onChange={(pattern) => changeRhythm({ pattern })}
+          />
+          {!signal.pattern.includes(".") && (
+            <Slider
+              label="Beeps per burst"
+              value={signal.beeps}
+              min={LIMITS.beeps.min}
+              max={LIMITS.beeps.max}
+              onChange={(beeps) => changeRhythm({ beeps })}
+            />
+          )}
+        </>
       )}
       <Slider
         label="Beep length"

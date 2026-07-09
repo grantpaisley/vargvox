@@ -95,18 +95,8 @@ export function playModeSound(
   let cursor = 0;
 
   if (scheme.modeChirps.enabled) {
-    const c = scheme.modeChirps;
-    for (let i = 0; i < modeNumber; i++) {
-      scheduleTone({
-        atMs: cursor,
-        durMs: c.chirpMs,
-        freqHz: c.pitchHz,
-        waveform: "square",
-        volume: c.volume,
-      });
-      cursor += c.chirpMs + c.gapMs;
-    }
-    cursor += scheme.sequence.gapMs;
+    const len = scheduleSignalOnce(scheme.modeChirps, cursor, modeNumber);
+    cursor += len + scheme.sequence.gapMs;
   }
 
   const voiceStart = cursor;
@@ -168,17 +158,7 @@ export function playVoiceSequence(
 export function playChirps(scheme: Scheme, modeNumber: number): number {
   ensureContext();
   if (!scheme.modeChirps.enabled) return 0;
-  const c = scheme.modeChirps;
-  for (let i = 0; i < modeNumber; i++) {
-    scheduleTone({
-      atMs: i * (c.chirpMs + c.gapMs),
-      durMs: c.chirpMs,
-      freqHz: c.pitchHz,
-      waveform: "square",
-      volume: c.volume,
-    });
-  }
-  return modeNumber * (c.chirpMs + c.gapMs) - c.gapMs;
+  return scheduleSignalOnce(scheme.modeChirps, 0, modeNumber);
 }
 
 function scheduleHp(scheme: Scheme, hp: number, atMs: number): number {
@@ -229,10 +209,14 @@ function scheduleTc(scheme: Scheme, tcPct: number, atMs: number): number {
   if (tcPct <= 0) return 0;
   const count = Math.max(1, Math.round(v.maxTicks * (tcPct / 100)));
   for (let i = 0; i < count; i++) {
+    // With a finish pitch set, the run of ticks ramps start → finish.
+    const t = count > 1 ? i / (count - 1) : 0;
+    const freq =
+      v.endPitchHz > 0 ? v.pitchHz + (v.endPitchHz - v.pitchHz) * t : v.pitchHz;
     scheduleTone({
       atMs: atMs + i * (v.tickMs + v.gapMs),
       durMs: v.tickMs,
-      freqHz: v.pitchHz,
+      freqHz: freq,
       waveform: "square",
       volume: v.volume,
     });
@@ -245,16 +229,20 @@ function scheduleTc(scheme: Scheme, tcPct: number, atMs: number): number {
 // handle; the loop is driven by a setTimeout chain so it stops instantly.
 // ---------------------------------------------------------------------------
 
-function scheduleSignalOnce(sig: FixedSignal, atMs: number): number {
+function scheduleSignalOnce(sig: FixedSignal, atMs: number, maxBeeps = Infinity): number {
   // signalSegments resolves the rhythm pattern, even defaults and any
-  // per-segment tweaks into one beep/gap timeline.
+  // per-segment tweaks into one beep/gap timeline. maxBeeps truncates the
+  // timeline (mode chirps: mode N plays the first N of the five beeps).
   let cursor = atMs;
   let end = atMs;
+  let beeps = 0;
   for (const seg of signalSegments(sig)) {
     if (seg.kind === "gap") {
       cursor += seg.durMs;
       continue;
     }
+    if (beeps >= maxBeeps) break;
+    beeps++;
     scheduleTone({
       atMs: cursor,
       durMs: seg.durMs,

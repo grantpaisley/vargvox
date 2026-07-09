@@ -28,7 +28,8 @@ export interface RegenVoice {
 
 export interface TcVoice {
   enabled: boolean;
-  pitchHz: number;
+  pitchHz: number; // pitch of the first tick
+  endPitchHz: number; // 0 = flat; otherwise the ticks ramp to this pitch
   maxTicks: number; // tick count at 100%
   tickMs: number;
   gapMs: number;
@@ -105,14 +106,6 @@ export function signalSegments(sig: FixedSignal): SignalSegment[] {
   });
 }
 
-export interface ModeChirps {
-  enabled: boolean;
-  pitchHz: number;
-  chirpMs: number;
-  gapMs: number;
-  volume: number;
-}
-
 export type PowerOnSignal = FixedSignal;
 
 export type VoiceOrder = "hp" | "regen" | "tc";
@@ -120,7 +113,9 @@ export type VoiceOrder = "hp" | "regen" | "tc";
 export interface Scheme {
   version: 1;
   name: string;
-  modeChirps: ModeChirps; // mode 3 = three chirps, played before the voices
+  // Mode-number chirps: a 5-beep signal of which mode N plays the first N.
+  // beeps is fixed at 5, pattern unused, loop always false.
+  modeChirps: FixedSignal;
   sequence: { order: VoiceOrder[]; gapMs: number; layered: boolean };
   hp: HpVoice;
   regen: RegenVoice;
@@ -163,7 +158,22 @@ export function defaultScheme(): Scheme {
   return {
     version: 1,
     name: "Untitled scheme",
-    modeChirps: { enabled: true, pitchHz: 1800, chirpMs: 35, gapMs: 70, volume: 0.5 },
+    modeChirps: {
+      enabled: true,
+      waveform: "square",
+      pitchHz: 1800,
+      pitch2Hz: 0,
+      sweepHz: 0,
+      beeps: 5,
+      pattern: "",
+      beepMs: 35,
+      gapMs: 70,
+      groupGapMs: 200,
+      tweaks: [],
+      loop: false,
+      loopIntervalMs: 0,
+      volume: 0.5,
+    },
     sequence: { order: ["hp", "regen", "tc"], gapMs: 130, layered: false },
     hp: {
       enabled: true,
@@ -188,6 +198,7 @@ export function defaultScheme(): Scheme {
     tc: {
       enabled: true,
       pitchHz: 2600,
+      endPitchHz: 0,
       maxTicks: 5,
       tickMs: 18,
       gapMs: 70,
@@ -338,12 +349,16 @@ export function sanitizeScheme(raw: unknown): Scheme {
   return {
     version: 1,
     name: typeof r.name === "string" && r.name.trim() ? r.name.trim().slice(0, 60) : d.name,
+    // Older schemes stored chirps as {chirpMs,...}; map that onto the signal
+    // shape, then pin the invariants (5 beeps, no pattern, no loop).
     modeChirps: {
-      enabled: typeof chirps.enabled === "boolean" ? chirps.enabled : d.modeChirps.enabled,
-      pitchHz: clamp(n(chirps.pitchHz, d.modeChirps.pitchHz), LIMITS.pitchHz.min, LIMITS.pitchHz.max),
-      chirpMs: clamp(n(chirps.chirpMs, d.modeChirps.chirpMs), LIMITS.durationMs.min, 200),
-      gapMs: clamp(n(chirps.gapMs, d.modeChirps.gapMs), LIMITS.gapMs.min, LIMITS.gapMs.max),
-      volume: clamp(n(chirps.volume, d.modeChirps.volume), 0, 1),
+      ...sanitizeFixedSignal(
+        { ...chirps, beepMs: chirps.beepMs ?? chirps.chirpMs },
+        d.modeChirps
+      ),
+      beeps: 5,
+      pattern: "",
+      loop: false,
     },
     sequence: {
       order,
@@ -373,6 +388,10 @@ export function sanitizeScheme(raw: unknown): Scheme {
     tc: {
       enabled: typeof tc.enabled === "boolean" ? tc.enabled : d.tc.enabled,
       pitchHz: clamp(n(tc.pitchHz, d.tc.pitchHz), LIMITS.pitchHz.min, LIMITS.pitchHz.max),
+      endPitchHz:
+        n(tc.endPitchHz, d.tc.endPitchHz) === 0
+          ? 0
+          : clamp(n(tc.endPitchHz, d.tc.endPitchHz), LIMITS.pitchHz.min, LIMITS.pitchHz.max),
       maxTicks: Math.round(clamp(n(tc.maxTicks, d.tc.maxTicks), LIMITS.ticks.min, LIMITS.ticks.max)),
       tickMs: clamp(n(tc.tickMs, d.tc.tickMs), 5, 100),
       gapMs: clamp(n(tc.gapMs, d.tc.gapMs), LIMITS.gapMs.min, LIMITS.gapMs.max),

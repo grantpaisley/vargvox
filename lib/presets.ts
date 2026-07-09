@@ -28,7 +28,7 @@ export const PRESETS: Preset[] = [
     name: "Sci-Fi Shuttle",
     description: "Smooth sine sweeps and scanner ticks, like a spacecraft console.",
     scheme: make("Sci-Fi Shuttle", (s) => {
-      s.modeChirps = { ...s.modeChirps, pitchHz: 2400, chirpMs: 25, gapMs: 50, volume: 0.4 };
+      s.modeChirps = { ...s.modeChirps, pitchHz: 2400, beepMs: 25, gapMs: 50, volume: 0.4 };
       s.hp = {
         ...s.hp,
         waveform: "sine",
@@ -46,7 +46,7 @@ export const PRESETS: Preset[] = [
         fallDurationMs: 400,
         volume: 0.5,
       };
-      s.tc = { ...s.tc, pitchHz: 3400, maxTicks: 6, tickMs: 12, gapMs: 50 };
+      s.tc = { ...s.tc, pitchHz: 2800, endPitchHz: 4000, maxTicks: 6, tickMs: 12, gapMs: 50 };
       s.reverse = {
         ...s.reverse,
         waveform: "triangle",
@@ -82,7 +82,7 @@ export const PRESETS: Preset[] = [
     name: "Retro Arcade",
     description: "Chunky square waves everywhere — 8-bit cabinet energy.",
     scheme: make("Retro Arcade", (s) => {
-      s.modeChirps = { ...s.modeChirps, pitchHz: 1600, chirpMs: 40, gapMs: 60 };
+      s.modeChirps = { ...s.modeChirps, pitchHz: 1600, beepMs: 40, gapMs: 60 };
       s.hp = {
         ...s.hp,
         waveform: "square",
@@ -121,7 +121,7 @@ export const PRESETS: Preset[] = [
     name: "Quiet Commuter",
     description: "Soft, short and low-volume — reverse stays loud for safety.",
     scheme: make("Quiet Commuter", (s) => {
-      s.modeChirps = { ...s.modeChirps, pitchHz: 1400, chirpMs: 25, volume: 0.3 };
+      s.modeChirps = { ...s.modeChirps, pitchHz: 1400, beepMs: 25, volume: 0.3 };
       s.hp = {
         ...s.hp,
         waveform: "triangle",
@@ -141,7 +141,7 @@ export const PRESETS: Preset[] = [
     name: "Beluga Pod",
     description: "Whale-song sweeps on every voice — squeaks, trills and falls.",
     scheme: make("Beluga Pod", (s) => {
-      s.modeChirps = { ...s.modeChirps, pitchHz: 2200, chirpMs: 30, gapMs: 60, volume: 0.4 };
+      s.modeChirps = { ...s.modeChirps, pitchHz: 2200, beepMs: 30, gapMs: 60, volume: 0.4 };
       s.hp = {
         ...s.hp,
         waveform: "sine",
